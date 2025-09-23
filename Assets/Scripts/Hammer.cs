@@ -12,8 +12,8 @@ public class Hammer : MonoBehaviour
     public float pauseTimeY  = 0.7f;   // pause at ends
 
     [Header("Effects")]
-    public float flattenDuration = 0f; // 0 = stay flattened; >0 = auto unflatten
-    public bool breakCarriedKeyOnHit = true; // optional L2 fail rule
+    public bool breakCarriedKeyOnHit = true;
+    public GameObject smallKeyPrefab;
 
     Rigidbody2D rb;
     Collider2D trigger;
@@ -23,10 +23,10 @@ public class Hammer : MonoBehaviour
         rb = GetComponent<Rigidbody2D>();
         trigger = GetComponent<Collider2D>();
 
-        // ensure it behaves as a moving trigger
+        // ensure it behaves as a moving solid object
         rb.bodyType = RigidbodyType2D.Kinematic;
         rb.gravityScale = 0f;
-        if (trigger != null) trigger.isTrigger = true;
+        if (trigger != null) trigger.isTrigger = false;
     }
 
     void Start()
@@ -36,6 +36,8 @@ public class Hammer : MonoBehaviour
             Debug.LogError("Hammer: Assign topPoint and bottomPoint.");
             enabled = false; return;
         }
+        
+        transform.position = topPoint.position;
         StartCoroutine(Cycle());
     }
 
@@ -65,38 +67,90 @@ public class Hammer : MonoBehaviour
         transform.position = b;
     }
 
-    void OnTriggerEnter2D(Collider2D other)
+    void OnCollisionEnter2D(Collision2D collision)
     {
-        // Flatten player
-        if (other.TryGetComponent<PlayerMovement>(out var player))
+        // Handle player collision
+        if (collision.gameObject.TryGetComponent<PlayerMovement>(out var player))
         {
-            player.SetFlattened(true);
-
-            // OPTIONAL: treat this as also hitting the carried key (because we disable key collider while held)
+            // Break carried key if player has one
             if (breakCarriedKeyOnHit)
             {
                 var heldKey = player.GetCarriedKey();
                 if (heldKey != null && heldKey.IsHeld)
                 {
-                    heldKey.Break();
-                    // TODO: call your fail flow (UI/reload) if wanted
-                    // GameManager.Instance.LevelFail();
+                    BreakKey(heldKey, player);
                 }
             }
-
-            if (flattenDuration > 0f)
-                StartCoroutine(UnflattenAfter(player, flattenDuration));
-
+            
+            // Flatten player if grounded
+            if (player.IsGrounded())
+            {
+                player.SetFlattened(true);
+            }
             return;
         }
-
-        // If you also want the hammer to break loose keys (not carried), you can detect Key here.
-        // if (other.TryGetComponent<Key>(out var key) && !key.IsHeld) { /* maybe push or break */ }
     }
 
-    IEnumerator UnflattenAfter(PlayerMovement p, float delay)
+    void OnTriggerEnter2D(Collider2D other)
     {
-        yield return new WaitForSeconds(delay);
-        if (p != null) p.SetFlattened(false);
+        // Handle key collision
+        if (other.TryGetComponent<Key>(out var key) && breakCarriedKeyOnHit)
+        {
+            PlayerMovement player = null;
+            if (key.IsHeld)
+            {
+                player = other.GetComponentInParent<PlayerMovement>();
+            }
+            BreakKey(key, player);
+        }
+    }
+
+    void BreakKey(Key key, PlayerMovement player = null)
+    {
+        // Only break normal keys, not small keys
+        if (key.keyType != KeyType.Normal) return;
+        
+        Vector3 keyPosition = key.transform.position;
+        
+        // Handle carried key
+        if (key.IsHeld && player != null)
+        {
+            key.Drop();
+            player.SetCarriedKey(null);
+        }
+        
+        // Create 2 smaller keys
+        CreateSmallKey(keyPosition + Vector3.left * 0.5f);
+        CreateSmallKey(keyPosition + Vector3.right * 0.5f);
+        
+        // Destroy the original key
+        Destroy(key.gameObject);
+    }
+
+
+    void CreateSmallKey(Vector3 position)
+    {
+        
+        if (smallKeyPrefab != null)
+        {
+            // Find the actual ground level using raycast
+            RaycastHit2D hit = Physics2D.Raycast(position, Vector2.down, 10f);
+            float groundLevel = hit.collider != null ? hit.point.y : -5f;
+            float keyHeight = 0.5f;
+            Vector3 groundPosition = new Vector3(position.x, groundLevel + keyHeight, position.z);
+            
+            GameObject smallKey = Instantiate(smallKeyPrefab, groundPosition, Quaternion.identity);
+            smallKey.name = "SmallKey";
+            Key keyComponent = smallKey.GetComponent<Key>();
+            if (keyComponent == null)
+            {
+                keyComponent = smallKey.AddComponent<Key>();
+            }
+            keyComponent.keyType = KeyType.Small;
+        }
+        else
+        {
+            Debug.LogWarning("SmallKeyPrefab is not assigned in the Hammer Inspector!");
+        }
     }
 }
