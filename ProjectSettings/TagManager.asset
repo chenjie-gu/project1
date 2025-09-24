@@ -15,7 +15,7 @@ TagManager:
   - Hazard
   - Hammer
   - Monster
-  - 
+  - background
   - 
   - 
   - 
@@ -39,6 +39,9 @@ TagManager:
   - 
   - 
   m_SortingLayers:
+  - name: background
+    uniqueID: 2536891865
+    locked: 0
   - name: Default
     uniqueID: 0
     locked: 0
