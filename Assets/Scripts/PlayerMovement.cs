@@ -24,38 +24,51 @@ public class PlayerMovement : MonoBehaviour
     public float pickupRadius;
     private ICarryable carried;
 
-
-
     [Header("Flattened State")]
     public bool isFlattened = false;
     public float flattenedJumpForce;
+    public Sprite flattenedSprite; // Drag your flattened sprite here
+    public Collider2D flattenedCollider; // Drag a separate collider for flattened state
 
     Rigidbody2D rb;
     Collider2D col;
+    SpriteRenderer spriteRenderer;
+    Sprite originalSprite;
     float moveInput;
     bool isGrounded;
     KeyCode jumpKey = KeyCode.Space;
     KeyCode interactKey = KeyCode.E;
     bool jumpRequested;
-    bool blockedByKey = false;
+
     // Store original values for flattened state
     Vector3 originalScale;
-    Vector2 originalColliderSize;
-    Vector2 originalColliderOffset;
+    
+    // Collider management
+    private Collider2D activeCollider;
+    
+    // Moving platform support
+    private Rigidbody2D platformRb;
+    private Vector3 lastPlatformPosition;
+    
 
     void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
         col = GetComponent<Collider2D>();
+        spriteRenderer = GetComponent<SpriteRenderer>();
         rb.freezeRotation = true;
         rb.interpolation = RigidbodyInterpolation2D.Interpolate;
         
-        // Store original values
         originalScale = transform.localScale;
-        if (col is BoxCollider2D box)
+        if (spriteRenderer != null)
         {
-            originalColliderSize = box.size;
-            originalColliderOffset = box.offset;
+            originalSprite = spriteRenderer.sprite;
+        }
+        
+        activeCollider = col;
+        if (flattenedCollider != null)
+        {
+            flattenedCollider.enabled = false;
         }
     }
 
@@ -126,8 +139,9 @@ public class PlayerMovement : MonoBehaviour
         {
             if (isFlattened)
             {
-                float scaledHeight = originalScale.y * 0.5f;
-                Vector3 groundCheckPos = new Vector3(transform.position.x, transform.position.y - scaledHeight, transform.position.z);
+                // Use the active collider's bounds for ground check
+                float colliderBottom = activeCollider.bounds.min.y;
+                Vector3 groundCheckPos = new Vector3(transform.position.x, colliderBottom, transform.position.z);
                 isGrounded = Physics2D.OverlapCircle(groundCheckPos, checkRadius, groundLayer);
             }
             else
@@ -135,48 +149,40 @@ public class PlayerMovement : MonoBehaviour
                 isGrounded = Physics2D.OverlapCircle(groundCheck.position, checkRadius, groundLayer);
             }
         }
+        
 
         // horizontal movement
         Vector2 newVelocity = new Vector2(moveInput * moveSpeed, rb.linearVelocity.y);
         
-        // Check if blocked by key collision
-        if (blockedByKey)
-        {
-            if (moveInput != 0)
-            {
-                newVelocity.x = 0;
-            }
-            
-            if (rb.linearVelocity.y > 0)
-            {
-                newVelocity.y = 0;
-            }
-        }
+        // Check for moving platform
+        CheckForMovingPlatform();
         
         // enforce horizontal boundaries
         if (enforceBoundaries)
         {
-            float halfWidth = originalColliderSize.x * 0.5f;
-            float currentX = transform.position.x;
+            float colliderLeft = activeCollider.bounds.min.x;
+            float colliderRight = activeCollider.bounds.max.x;
             
             // Check if moving left would go beyond left boundary
-            if (newVelocity.x < 0 && currentX + newVelocity.x * Time.fixedDeltaTime <= leftBoundary + halfWidth)
+            if (newVelocity.x < 0 && colliderLeft + newVelocity.x * Time.fixedDeltaTime <= leftBoundary)
             {
                 newVelocity.x = 0;
                 // Snap to boundary if already past it
-                if (currentX < leftBoundary + halfWidth)
+                if (colliderLeft < leftBoundary)
                 {
-                    transform.position = new Vector3(leftBoundary + halfWidth, transform.position.y, transform.position.z);
+                    float offset = leftBoundary - colliderLeft;
+                    transform.position = new Vector3(transform.position.x + offset, transform.position.y, transform.position.z);
                 }
             }
             // Check if moving right would go beyond right boundary
-            else if (newVelocity.x > 0 && currentX + newVelocity.x * Time.fixedDeltaTime >= rightBoundary - halfWidth)
+            else if (newVelocity.x > 0 && colliderRight + newVelocity.x * Time.fixedDeltaTime >= rightBoundary)
             {
                 newVelocity.x = 0;
                 // Snap to boundary if already past it
-                if (currentX > rightBoundary - halfWidth)
+                if (colliderRight > rightBoundary)
                 {
-                    transform.position = new Vector3(rightBoundary - halfWidth, transform.position.y, transform.position.z);
+                    float offset = rightBoundary - colliderRight;
+                    transform.position = new Vector3(transform.position.x + offset, transform.position.y, transform.position.z);
                 }
             }
         }
@@ -193,8 +199,9 @@ public class PlayerMovement : MonoBehaviour
             jumpRequested = false;
         }
         
+        
         // enforce vertical boundaries
-        float halfHeight = col.bounds.size.y * 0.5f;
+        float halfHeight = activeCollider.bounds.size.y * 0.5f;
         float currentY = transform.position.y;
         
         // Check bottom boundary
@@ -209,6 +216,19 @@ public class PlayerMovement : MonoBehaviour
             transform.position = new Vector3(transform.position.x, topBoundary - halfHeight, transform.position.z);
             rb.linearVelocity = new Vector2(rb.linearVelocity.x, 0);
         }
+        
+        // Move player with platform if standing on it (AFTER all velocity calculations)
+        if (platformRb != null && isGrounded)
+        {
+            Vector3 platformMovement = platformRb.transform.position - lastPlatformPosition;
+            transform.position += platformMovement;
+        }
+        
+        // Update platform position for next frame
+        if (platformRb != null)
+        {
+            lastPlatformPosition = platformRb.transform.position;
+        }
     }
 
     public void SetFlattened(bool flattened)
@@ -220,19 +240,44 @@ public class PlayerMovement : MonoBehaviour
 
         if (flattened)
         {
-            Vector3 flattenedScale = new Vector3(originalScale.x * 1.3f, originalScale.y * 0.5f, originalScale.z);
+            // Scale sprite width to 1.3x and height to 1.3x
+            Vector3 flattenedScale = new Vector3(originalScale.x * 1.3f, originalScale.y * 1.3f, originalScale.z);
             transform.localScale = flattenedScale;
             
-            float scaleFactor = flattenedScale.y / originalScale.y;
-            float heightDifference = (originalScale.y - flattenedScale.y) * 0.5f;
-            transform.position = new Vector3(transform.position.x, transform.position.y - heightDifference, transform.position.z);
+            // Switch to flattened collider
+            if (flattenedCollider == null)
+            {
+                Debug.LogError("Flattened collider not assigned! Please assign a flattened collider in the Inspector.");
+                return;
+            }
+            
+            col.enabled = false; // Disable normal collider
+            flattenedCollider.enabled = true; // Enable flattened collider
+            activeCollider = flattenedCollider;
+            
+            // Change sprite to flattened version
+            if (spriteRenderer != null && flattenedSprite != null)
+            {
+                spriteRenderer.sprite = flattenedSprite;
+            }
         }
         else
         {
-            if (col is BoxCollider2D box)
+            // Switch back to normal collider
+            if (flattenedCollider == null)
             {
-                box.size = originalColliderSize;
-                box.offset = originalColliderOffset;
+                Debug.LogError("Flattened collider not assigned! Please assign a flattened collider in the Inspector.");
+                return;
+            }
+            
+            flattenedCollider.enabled = false; // Disable flattened collider
+            col.enabled = true; // Enable normal collider
+            activeCollider = col;
+            
+            // Restore original sprite
+            if (spriteRenderer != null && originalSprite != null)
+            {
+                spriteRenderer.sprite = originalSprite;
             }
             
             transform.localScale = originalScale;
@@ -283,15 +328,38 @@ public class PlayerMovement : MonoBehaviour
         Gizmos.DrawLine(new Vector3(leftBoundary, topBoundary, 0), new Vector3(rightBoundary, topBoundary, 0));
     }
     
-    // Method for key to tell player it's blocked
-    public void SetBlockedByKey(bool blocked)
-    {
-        blockedByKey = blocked;
-    }
-    
     // Method for hammer to check if player is grounded
     public bool IsGrounded()
     {
         return isGrounded;
+    }
+    
+    void CheckForMovingPlatform()
+    {
+        if (isGrounded && groundCheck != null)
+        {
+            Collider2D[] hits = Physics2D.OverlapCircleAll(groundCheck.position, checkRadius, groundLayer);
+            
+            foreach (var hit in hits)
+            {
+                if ((groundLayer.value & (1 << hit.gameObject.layer)) != 0)
+                {
+                    Rigidbody2D newPlatformRb = hit.gameObject.GetComponent<Rigidbody2D>();
+                    
+                    // If this is a new platform, store its position
+                    if (platformRb != newPlatformRb)
+                    {
+                        platformRb = newPlatformRb;
+                        if (platformRb != null)
+                        {
+                            lastPlatformPosition = platformRb.transform.position;
+                        }
+                    }
+                    return;
+                }
+            }
+        }
+        
+        platformRb = null;
     }
 }

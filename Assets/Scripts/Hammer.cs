@@ -13,6 +13,8 @@ public class Hammer : MonoBehaviour
 
     [Header("Effects")]
     public bool breakCarriedKeyOnHit = true;
+    public bool flattenPlayerOnHit = true;
+    public bool killPlayerOnHit = true;
     public GameObject smallKeyPrefab;
 
     Rigidbody2D rb;
@@ -72,6 +74,8 @@ public class Hammer : MonoBehaviour
         // Handle player collision
         if (collision.gameObject.TryGetComponent<PlayerMovement>(out var player))
         {
+            // Hammer is completely safe - no game over, just break keys and flatten
+            
             // Break carried key if player has one
             if (breakCarriedKeyOnHit)
             {
@@ -82,8 +86,8 @@ public class Hammer : MonoBehaviour
                 }
             }
             
-            // Flatten player if grounded
-            if (player.IsGrounded())
+            // Flatten player if grounded and flattening is enabled
+            if (flattenPlayerOnHit && player.IsGrounded())
             {
                 player.SetFlattened(true);
             }
@@ -130,23 +134,31 @@ public class Hammer : MonoBehaviour
 
     void CreateSmallKey(Vector3 position)
     {
-        
         if (smallKeyPrefab != null)
         {
             // Find the actual ground level using raycast
             RaycastHit2D hit = Physics2D.Raycast(position, Vector2.down, 10f);
             float groundLevel = hit.collider != null ? hit.point.y : -5f;
-            float keyHeight = 0.5f;
-            Vector3 groundPosition = new Vector3(position.x, groundLevel + keyHeight, position.z);
             
-            GameObject smallKey = Instantiate(smallKeyPrefab, groundPosition, Quaternion.identity);
+            // Create the small key first to get its actual height
+            GameObject smallKey = Instantiate(smallKeyPrefab, position, Quaternion.identity);
             smallKey.name = "SmallKey";
+            
+            // Get the key component and set its type
             Key keyComponent = smallKey.GetComponent<Key>();
             if (keyComponent == null)
             {
                 keyComponent = smallKey.AddComponent<Key>();
             }
             keyComponent.keyType = KeyType.Small;
+            
+            // Calculate the actual half height of the small key
+            Collider2D keyCollider = smallKey.GetComponent<Collider2D>();
+            float keyHalfHeight = keyCollider != null ? keyCollider.bounds.size.y * 0.5f : 0.25f;
+            
+            // Position the key on the ground: ground top + half key height
+            Vector3 groundPosition = new Vector3(position.x, groundLevel + keyHalfHeight, position.z);
+            smallKey.transform.position = groundPosition;
         }
         else
         {
