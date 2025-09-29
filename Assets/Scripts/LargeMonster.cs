@@ -1,95 +1,97 @@
 using UnityEngine;
 using System.Collections;
 
-[RequireComponent(typeof(Collider2D))]
+[RequireComponent(typeof(SpriteRenderer))]
 public class LargeMonster : MonoBehaviour
 {
     [Header("Detect")]
     public float detectionRange = 6f;
-    public LayerMask playerLayer;
+    public LayerMask playerLayer;   // must include the Player layer
 
-    [Header("Attack")]
-    public float warningDuration = 0.6f;
-    public float smashActiveDuration = 0.6f;
-    public float cooldown = 1.2f;
+    [Header("Smash Motion")]
+    [Tooltip("Local offset from rest to the bottom of the smash (negative Y goes down).")]
+    public Vector2 smashOffset = new Vector2(0f, -1.5f);
+    public float warningDuration = 0.6f;   // color flash before moving
+    public float downTime = 0.18f;         // travel to bottom
+    public float holdTime = 0.25f;         // zone active at bottom
+    public float upTime = 0.22f;           // return to rest
+    public float cooldown = 1.0f;          // wait before next check
+    public AnimationCurve ease = AnimationCurve.EaseInOut(0,0,1,1);
 
-    [Tooltip("Area that becomes dangerous/blocks during smash. Keep disabled by default.")]
-    public Collider2D smashZone;   // e.g., BoxCollider2D; leave disabled until attack
+    [Header("Hit Zone")]
+    public Collider2D smashZone;           // child BoxCollider2D (disabled at start)
 
     [Header("Visuals (optional)")]
     public SpriteRenderer sr;
     public Color warningColor = new Color(1f, 0.7f, 0.2f);
     public Color normalColor = Color.white;
 
+    Vector3 restPos;
     bool attacking;
     bool coolingDown;
 
-    void Reset()
+    void Awake()
     {
-        // If this object's collider is used as a detector, keep it trigger.
-        var c = GetComponent<Collider2D>();
-        if (c != null) c.isTrigger = true;
+        if (!sr) sr = GetComponent<SpriteRenderer>();
+        restPos = transform.position;
+
+        if (smashZone) smashZone.enabled = false; // start off
     }
 
     void Update()
     {
         if (attacking || coolingDown) return;
 
-        // Detect player around the monster
+        // Detect player inside range
         Collider2D hit = Physics2D.OverlapCircle(transform.position, detectionRange, playerLayer);
-        if (hit != null && hit.TryGetComponent<PlayerMovement>(out var player))
+        if (hit && hit.TryGetComponent<PlayerMovement>(out var player))
         {
-            // If player is carrying small monster, do nothing
-            if (player.IsCarryingSmallMonster())
-                return;
+            // Don’t attack if player is carrying a small monster
+            if (player.IsCarryingSmallMonster()) return;
 
-            StartCoroutine(AttackSequence(player));
+            StartCoroutine(AttackSequence());
         }
     }
 
-    IEnumerator AttackSequence(PlayerMovement player)
+    IEnumerator AttackSequence()
     {
         attacking = true;
 
-        // Warning phase (flash color, play anim, etc.)
-        if (sr != null) sr.color = warningColor;
+        // Warning flash
+        if (sr) sr.color = warningColor;
         yield return new WaitForSeconds(warningDuration);
-        if (sr != null) sr.color = normalColor;
+        if (sr) sr.color = normalColor;
 
-        // Smash phase: enable smashZone temporarily
-        if (smashZone != null)
+        Vector3 bottom = restPos + (Vector3)smashOffset;
+
+        // Move down
+        float t = 0f;
+        while (t < downTime)
         {
-            bool wasEnabled = smashZone.enabled;
-            smashZone.enabled = true; // must be enabled for OverlapCollider
-
-            // Optional: if smashZone is set to trigger, "kill" player inside it
-            if (smashZone.isTrigger)
-            {
-                // Build a no-filter ContactFilter2D
-                ContactFilter2D filter = new ContactFilter2D();
-                filter.NoFilter();
-
-                // Buffer to receive overlaps
-                Collider2D[] results = new Collider2D[8];
-                int count = Physics2D.OverlapCollider(smashZone, filter, results);
-
-                for (int i = 0; i < count; i++)
-                {
-                    var c = results[i];
-                    if (c != null && c.TryGetComponent<PlayerMovement>(out var p))
-                    {
-                        Debug.LogError("Player failed: smashed by large monster!");
-                        // TODO: call your game-over/respawn logic here
-                        break;
-                    }
-                }
-            }
-
-            yield return new WaitForSeconds(smashActiveDuration);
-            smashZone.enabled = wasEnabled;
+            t += Time.deltaTime;
+            float u = downTime <= 0f ? 1f : ease.Evaluate(t / downTime);
+            transform.position = Vector3.Lerp(restPos, bottom, u);
+            yield return null;
         }
+        transform.position = bottom;
 
-        // Cooldown before next attack
+        // Enable hit zone while at bottom
+        if (smashZone) smashZone.enabled = true;
+        yield return new WaitForSeconds(holdTime);
+        if (smashZone) smashZone.enabled = false;
+
+        // Move up
+        t = 0f;
+        while (t < upTime)
+        {
+            t += Time.deltaTime;
+            float u = upTime <= 0f ? 1f : ease.Evaluate(t / upTime);
+            transform.position = Vector3.Lerp(bottom, restPos, u);
+            yield return null;
+        }
+        transform.position = restPos;
+
+        // Cooldown
         coolingDown = true;
         yield return new WaitForSeconds(cooldown);
         coolingDown = false;
@@ -100,5 +102,12 @@ public class LargeMonster : MonoBehaviour
     {
         Gizmos.color = Color.magenta;
         Gizmos.DrawWireSphere(transform.position, detectionRange);
+
+        // show bottom of smash
+        Vector3 from = Application.isPlaying ? restPos : transform.position;
+        Vector3 to = from + (Vector3)smashOffset;
+        Gizmos.color = Color.yellow;
+        Gizmos.DrawLine(from, to);
+        Gizmos.DrawSphere(to, 0.05f);
     }
 }
