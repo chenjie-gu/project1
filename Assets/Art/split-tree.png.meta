@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: f8dff85a64dbc485dbe5add9e332042d
+guid: 1ae7bc90889ef4f40bde8a3e90ddec70
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: 7237638102114805326
-    second: peanut 1_0
+      213: 6766042235231373260
+    second: split-tree_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -113,13 +113,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: peanut 1_0
+      name: split-tree_0
       rect:
         serializedVersion: 2
         x: 0
         y: 0
-        width: 284
-        height: 274
+        width: 615
+        height: 763
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -128,8 +128,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: e46a269d181417460800000000000000
-      internalID: 7237638102114805326
+      spriteID: cc7814e909fc5ed50800000000000000
+      internalID: 6766042235231373260
       vertices: []
       indices: 
       edges: []
@@ -148,7 +148,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      peanut 1_0: 7237638102114805326
+      split-tree_0: 6766042235231373260
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

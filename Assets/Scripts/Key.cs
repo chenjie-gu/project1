@@ -72,7 +72,7 @@ public class Key : MonoBehaviour, ICarryable
         keyBlockCollider.isTrigger = isBlockColliderTrigger;
     }
     
-    void DestroyKeyBlockCollider()
+    public void DestroyKeyBlockCollider()
     {
         if (keyBlockCollider != null)
         {
@@ -80,6 +80,7 @@ public class Key : MonoBehaviour, ICarryable
             keyBlockCollider = null;
         }
     }
+
     public void PickUp(Transform newHolder)
     {
         // Store original scale before first pickup
@@ -92,8 +93,6 @@ public class Key : MonoBehaviour, ICarryable
         IsHeld = true;
         holder = newHolder;
 
-        // Don't parent the key - position it manually to avoid scale inheritance
-        transform.SetParent(null);
         transform.localScale = originalScale;
         
         // Create the blocking collider if enabled
@@ -102,16 +101,14 @@ public class Key : MonoBehaviour, ICarryable
             CreateKeyBlockCollider();
         }
         
-        // Keep collider as trigger to avoid blocking player movement
         keyCollider.isTrigger = true;
         
-        // Keep Rigidbody2D as Kinematic but enable collision detection
         var rb = GetComponent<Rigidbody2D>();
         if (rb != null)
         {
-            rb.bodyType = RigidbodyType2D.Kinematic; // Keep kinematic
-            rb.gravityScale = 0f; // No gravity
-            rb.constraints = RigidbodyConstraints2D.FreezeRotation; // Don't rotate
+            rb.bodyType = RigidbodyType2D.Kinematic;
+            rb.gravityScale = 0f;
+            rb.constraints = RigidbodyConstraints2D.FreezeRotation;
         }
     }
 
@@ -129,20 +126,16 @@ public class Key : MonoBehaviour, ICarryable
             DestroyKeyBlockCollider();
         }
         
-        transform.SetParent(null);
-        
         if (holderRef != null)
         {
             var player = holderRef.GetComponentInParent<PlayerMovement>();
             if (player != null)
             {
-                // Find the ground below the player using raycast
                 Vector2 raycastOrigin = new Vector2(player.transform.position.x, player.transform.position.y);
                 RaycastHit2D hit = Physics2D.Raycast(raycastOrigin, Vector2.down, Mathf.Infinity, player.groundLayer);
                 
                 if (hit.collider != null)
                 {
-                    // Position key on the ground
                     float keyHalfHeight = keyCollider.bounds.size.y * 0.5f;
                     Vector3 dropPosition = new Vector3(
                         player.transform.position.x,
@@ -162,11 +155,12 @@ public class Key : MonoBehaviour, ICarryable
                     
                     if (playerCollider != null)
                     {
-                        float keyHalfHeight = keyCollider.bounds.size.y * 0.5f;
+                        // Calculate distance from transform center to collider bottom
+                        float distanceFromCenterToBottom = -keyCollider.bounds.min.y;
                         float groundY = playerCollider.bounds.min.y;
                         Vector3 dropPosition = new Vector3(
                             player.transform.position.x,
-                            groundY + keyHalfHeight,
+                            groundY + distanceFromCenterToBottom,
                             player.transform.position.z
                         );
                         transform.position = dropPosition;

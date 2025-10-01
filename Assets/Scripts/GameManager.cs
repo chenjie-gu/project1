@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using TMPro;
+using System.Collections;
 
 public class GameManager : MonoBehaviour
 {
@@ -18,6 +19,11 @@ public class GameManager : MonoBehaviour
     public GameObject gameOverCanvasPrefab;
     public GameObject restartButtonPrefab;
     
+    [Header("Tutorial")]
+    public GameObject tutorialCanvasPrefab;
+    public GameObject tutorialKeyPrefab;
+    public Transform tutorialKeySpawnPoint;
+    
     private bool isGameOver = false;
     private TextMeshProUGUI gameOverTextMeshPro;
     private TextMeshProUGUI restartTextMeshPro;
@@ -27,6 +33,8 @@ public class GameManager : MonoBehaviour
     
     void Awake()
     {
+        Debug.Log("GameManager: Awake called");
+        
         // Singleton pattern
         if (Instance == null)
         {
@@ -34,9 +42,11 @@ public class GameManager : MonoBehaviour
             DontDestroyOnLoad(gameObject);
             
             SceneManager.sceneLoaded += OnSceneLoaded;
+            Debug.Log("GameManager: Singleton created and sceneLoaded event subscribed");
         }
         else
         {
+            Debug.Log("GameManager: Duplicate GameManager destroyed");
             Destroy(gameObject);
         }
     }
@@ -48,8 +58,20 @@ public class GameManager : MonoBehaviour
     
     void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
+        Debug.Log("GameManager: Scene loaded - " + scene.name);
         ResetGameState();
         EnsureRestartButtonExists();
+        
+        // Start tutorial only in Tutorial level
+        if (scene.name == "Tutorial")
+        {
+            Debug.Log("GameManager: In Tutorial level, starting tutorial");
+            StartTutorial();
+        }
+        else
+        {
+            Debug.Log("GameManager: In " + scene.name + ", no tutorial needed");
+        }
     }
     
     void ResetGameState()
@@ -82,50 +104,89 @@ public class GameManager : MonoBehaviour
     
     void FindUIComponents()
     {
+        Debug.Log("GameManager: FindUIComponents called");
+        
         var allTexts = FindObjectsOfType<TextMeshProUGUI>();
+        Debug.Log($"GameManager: Found {allTexts.Length} TextMeshProUGUI components");
         
         if (allTexts.Length == 0 && gameOverCanvasPrefab != null)
         {
+            Debug.Log("GameManager: No TextMeshProUGUI found, creating from prefab");
             var canvasInstance = Instantiate(gameOverCanvasPrefab);
             DontDestroyOnLoad(canvasInstance);
             
             var texts = canvasInstance.GetComponentsInChildren<TextMeshProUGUI>();
+            Debug.Log($"GameManager: Created canvas with {texts.Length} TextMeshProUGUI components");
             
             if (texts.Length > 0)
             {
                 gameOverTextMeshPro = texts[0];
                 gameOverTextMeshPro.text = gameOverText;
                 gameOverTextMeshPro.gameObject.SetActive(false);
+                Debug.Log("GameManager: Game over text component set");
             }
             if (texts.Length > 1)
             {
                 restartTextMeshPro = texts[1];
                 restartTextMeshPro.text = restartText;
                 restartTextMeshPro.gameObject.SetActive(false);
+                Debug.Log("GameManager: Restart text component set");
             }
             else if (texts.Length == 1)
             {
                 restartTextMeshPro = texts[0];
                 restartTextMeshPro.text = restartText;
                 restartTextMeshPro.gameObject.SetActive(false);
+                Debug.Log("GameManager: Restart text component set (using same as game over)");
             }
         }
         else if (allTexts.Length > 0)
         {
+            Debug.Log("GameManager: Using existing TextMeshProUGUI components");
             if (gameOverTextMeshPro == null)
             {
                 gameOverTextMeshPro = allTexts[0];
+                Debug.Log("GameManager: Game over text component assigned from existing");
             }
             if (restartTextMeshPro == null)
             {
                 restartTextMeshPro = allTexts.Length > 1 ? allTexts[1] : allTexts[0];
+                Debug.Log("GameManager: Restart text component assigned from existing");
             }
+        }
+        else
+        {
+            Debug.LogError("GameManager: No TextMeshProUGUI components found and no gameOverCanvasPrefab assigned!");
         }
     }
     
     void Start()
     {
+        Debug.Log("GameManager: Start called");
         CreateRestartButton();
+        
+        // Manual tutorial trigger since OnSceneLoaded might not be called
+        StartCoroutine(CheckForTutorialAfterDelay());
+    }
+    
+    private System.Collections.IEnumerator CheckForTutorialAfterDelay()
+    {
+        // Wait a frame to ensure everything is loaded
+        yield return new WaitForEndOfFrame();
+        
+        string currentSceneName = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+        Debug.Log("GameManager: Manual scene check - " + currentSceneName);
+        
+        // Start tutorial only in Tutorial level
+        if (currentSceneName == "Tutorial")
+        {
+            Debug.Log("GameManager: In Tutorial level, starting tutorial");
+            StartTutorial();
+        }
+        else
+        {
+            Debug.Log("GameManager: In " + currentSceneName + ", no tutorial needed");
+        }
     }
     
     void CreateRestartButton()
@@ -335,39 +396,64 @@ public class GameManager : MonoBehaviour
     
     public void GameOver()
     {
-        if (isGameOver) return;
+        Debug.Log("GameManager: GameOver called");
+        
+        if (isGameOver) 
+        {
+            Debug.Log("GameManager: Already game over, ignoring");
+            return;
+        }
         
         isGameOver = true;
+        Debug.Log("GameManager: Game over state set to true");
         
         // Hide restart button during game over
         if (restartButton != null)
         {
             restartButton.gameObject.SetActive(false);
+            Debug.Log("GameManager: Restart button hidden");
+        }
+        else
+        {
+            Debug.LogWarning("GameManager: Restart button is null");
         }
         
         if (gameOverTextMeshPro == null || restartTextMeshPro == null)
         {
+            Debug.Log("GameManager: UI components missing, trying to find them");
             FindUIComponents();
         }
         
         if (gameOverTextMeshPro != null)
         {
+            Debug.Log("GameManager: Showing game over text");
             gameOverTextMeshPro.transform.root.gameObject.SetActive(true);
             gameOverTextMeshPro.gameObject.SetActive(true);
+        }
+        else
+        {
+            Debug.LogError("GameManager: gameOverTextMeshPro is null! Cannot show game over text.");
         }
         
         if (restartTextMeshPro != null)
         {
+            Debug.Log("GameManager: Showing restart text");
             restartTextMeshPro.gameObject.SetActive(true);
+        }
+        else
+        {
+            Debug.LogError("GameManager: restartTextMeshPro is null! Cannot show restart text.");
         }
         
         var player = FindObjectOfType<PlayerMovement>();
         if (player != null)
         {
             player.enabled = false;
+            Debug.Log("GameManager: Player movement disabled");
         }
         
         Time.timeScale = 0f;
+        Debug.Log("GameManager: Time scale set to 0");
     }
     
     public void RestartGame()
@@ -376,9 +462,50 @@ public class GameManager : MonoBehaviour
         SceneManager.LoadScene(SceneManager.GetActiveScene().name);
     }
     
+    public void StartNewGame()
+    {
+        Debug.Log("StartNewGame called");
+        SceneManager.LoadScene("Level1");
+    }
+    
+    [ContextMenu("Force Start Tutorial")]
+    public void ForceStartTutorial()
+    {
+        Debug.Log("GameManager: Force starting tutorial");
+        StartTutorial();
+    }
+    
     public bool IsGameOver()
     {
         return isGameOver;
+    }
+    
+    private void StartTutorial()
+    {
+        Debug.Log("GameManager: StartTutorial called");
+        
+        if (tutorialCanvasPrefab != null)
+        {
+            Debug.Log("GameManager: Creating tutorial canvas from prefab");
+            GameObject tutorialCanvas = Instantiate(tutorialCanvasPrefab);
+            TutorialManager tutorialManager = tutorialCanvas.GetComponent<TutorialManager>();
+            
+            if (tutorialManager != null)
+            {
+                Debug.Log("GameManager: TutorialManager found, setting references");
+                // Set tutorial key prefab and spawn point
+                tutorialManager.tutorialKeyPrefab = tutorialKeyPrefab;
+                tutorialManager.keySpawnPoint = tutorialKeySpawnPoint;
+            }
+            else
+            {
+                Debug.LogError("GameManager: TutorialManager component not found on tutorial canvas prefab!");
+            }
+        }
+        else
+        {
+            Debug.LogError("GameManager: tutorialCanvasPrefab is null! Please assign a tutorial canvas prefab.");
+        }
     }
 }
 

@@ -12,6 +12,10 @@ public class PlayerMovement : MonoBehaviour
     [Header("Movement")]
     public float moveSpeed;
     public float jumpForce;
+    
+    [Header("Wall Sliding")]
+    public bool enableWallSliding = true;
+    public float wallSlideSpeed = 3f;
 
     [Header("Boundaries")]
     public float leftBoundary;
@@ -39,6 +43,10 @@ public class PlayerMovement : MonoBehaviour
     KeyCode jumpKey = KeyCode.Space;
     KeyCode interactKey = KeyCode.E;
     bool jumpRequested;
+    bool isTouchingWall;
+    bool isTouchingLeftWall;
+    bool isTouchingRightWall;
+    bool isWallSliding;
 
     // Store original values for flattened state
     Vector3 originalScale;
@@ -46,9 +54,6 @@ public class PlayerMovement : MonoBehaviour
     // Collider management
     private Collider2D activeCollider;
     
-    // Moving platform support
-    private Rigidbody2D platformRb;
-    private Vector3 lastPlatformPosition;
     
 
     void Awake()
@@ -151,11 +156,39 @@ public class PlayerMovement : MonoBehaviour
         }
         
 
+        // Check for wall contact
+        CheckWallContact();
+        
         // horizontal movement
         Vector2 newVelocity = new Vector2(moveInput * moveSpeed, rb.linearVelocity.y);
         
-        // Check for moving platform
-        CheckForMovingPlatform();
+        // Apply wall sliding only when pressing movement key in same direction as wall
+        if (enableWallSliding && !isGrounded)
+        {
+            // Check if player is pressing left and touching left wall
+            if (isTouchingLeftWall && moveInput < 0)
+            {
+                newVelocity.y = -wallSlideSpeed;
+                newVelocity.x = 0;
+            }
+            // Check if player is pressing right and touching right wall
+            else if (isTouchingRightWall && moveInput > 0)
+            {
+                newVelocity.y = -wallSlideSpeed;
+                newVelocity.x = 0;
+            }
+            // Allow movement away from walls
+            else if (isTouchingLeftWall && moveInput > 0)
+            {
+                newVelocity.x = moveInput * moveSpeed;
+            }
+            else if (isTouchingRightWall && moveInput < 0)
+            {
+                newVelocity.x = moveInput * moveSpeed;
+            }
+        }
+        
+        // Platform detection is now handled directly in the platform movement section
         
         // enforce horizontal boundaries
         if (enforceBoundaries)
@@ -217,17 +250,26 @@ public class PlayerMovement : MonoBehaviour
             rb.linearVelocity = new Vector2(rb.linearVelocity.x, 0);
         }
         
-        // Move player with platform if standing on it (AFTER all velocity calculations)
-        if (platformRb != null && isGrounded)
+        // Physics-based platform movement - no direct position manipulation
+        if (isGrounded && groundCheck != null)
         {
-            Vector3 platformMovement = platformRb.transform.position - lastPlatformPosition;
-            transform.position += platformMovement;
-        }
-        
-        // Update platform position for next frame
-        if (platformRb != null)
-        {
-            lastPlatformPosition = platformRb.transform.position;
+            // Detect platform and apply its velocity to player
+            Collider2D[] hits = Physics2D.OverlapCircleAll(groundCheck.position, checkRadius, groundLayer);
+            
+            foreach (var hit in hits)
+            {
+                if ((groundLayer.value & (1 << hit.gameObject.layer)) != 0)
+                {
+                    Rigidbody2D platformRb = hit.gameObject.GetComponent<Rigidbody2D>();
+                    if (platformRb != null)
+                    {
+                        // Apply platform velocity to player's velocity
+                        Vector2 platformVelocity = platformRb.linearVelocity;
+                        newVelocity += platformVelocity;
+                        break;
+                    }
+                }
+            }
         }
     }
 
@@ -247,7 +289,6 @@ public class PlayerMovement : MonoBehaviour
             // Switch to flattened collider
             if (flattenedCollider == null)
             {
-                Debug.LogError("Flattened collider not assigned! Please assign a flattened collider in the Inspector.");
                 return;
             }
             
@@ -266,7 +307,6 @@ public class PlayerMovement : MonoBehaviour
             // Switch back to normal collider
             if (flattenedCollider == null)
             {
-                Debug.LogError("Flattened collider not assigned! Please assign a flattened collider in the Inspector.");
                 return;
             }
             
@@ -334,32 +374,65 @@ public class PlayerMovement : MonoBehaviour
         return isGrounded;
     }
     
-    void CheckForMovingPlatform()
+    void CheckWallContact()
     {
-        if (isGrounded && groundCheck != null)
+        if (!enableWallSliding) return;
+        
+        // Check for walls at multiple heights along the player's collider
+        float colliderTop = activeCollider.bounds.max.y;
+        float colliderBottom = activeCollider.bounds.min.y;
+        float colliderCenter = transform.position.y;
+        
+        // Check at top and center always, and at feet only when not grounded (to avoid edge issues)
+        float[] checkHeights = { colliderTop, colliderCenter };
+        if (!isGrounded)
         {
-            Collider2D[] hits = Physics2D.OverlapCircleAll(groundCheck.position, checkRadius, groundLayer);
+            checkHeights = new float[] { colliderTop, colliderCenter, colliderBottom };
+        }
+        
+        bool detectedLeftWall = false;
+        bool detectedRightWall = false;
+        
+        foreach (float height in checkHeights)
+        {
+            Vector2 leftCheck = new Vector2(activeCollider.bounds.min.x - 0.05f, height);
+            Vector2 rightCheck = new Vector2(activeCollider.bounds.max.x + 0.05f, height);
             
-            foreach (var hit in hits)
+            RaycastHit2D leftHit = Physics2D.Raycast(leftCheck, Vector2.left, 0.15f);
+            RaycastHit2D rightHit = Physics2D.Raycast(rightCheck, Vector2.right, 0.15f);
+            
+            if (leftHit.collider != null && !leftHit.collider.isTrigger)
             {
-                if ((groundLayer.value & (1 << hit.gameObject.layer)) != 0)
-                {
-                    Rigidbody2D newPlatformRb = hit.gameObject.GetComponent<Rigidbody2D>();
-                    
-                    // If this is a new platform, store its position
-                    if (platformRb != newPlatformRb)
-                    {
-                        platformRb = newPlatformRb;
-                        if (platformRb != null)
-                        {
-                            lastPlatformPosition = platformRb.transform.position;
-                        }
-                    }
-                    return;
-                }
+                detectedLeftWall = true;
+            }
+            if (rightHit.collider != null && !rightHit.collider.isTrigger)
+            {
+                detectedRightWall = true;
             }
         }
         
-        platformRb = null;
+        // Add stability to wall detection - only change state if detected for multiple frames
+        if (detectedLeftWall && !isTouchingLeftWall)
+        {
+            isTouchingLeftWall = true;
+        }
+        else if (!detectedLeftWall && isTouchingLeftWall)
+        {
+            // Only stop detecting wall if not detected for a few frames
+            isTouchingLeftWall = false;
+        }
+        
+        if (detectedRightWall && !isTouchingRightWall)
+        {
+            isTouchingRightWall = true;
+        }
+        else if (!detectedRightWall && isTouchingRightWall)
+        {
+            // Only stop detecting wall if not detected for a few frames
+            isTouchingRightWall = false;
+        }
+        
+        isTouchingWall = isTouchingLeftWall || isTouchingRightWall;
+        
     }
 }

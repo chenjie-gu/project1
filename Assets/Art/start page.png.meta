@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: f8dff85a64dbc485dbe5add9e332042d
+guid: f5154cbe9cb7c400d9e511faa96c5fb9
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: 7237638102114805326
-    second: peanut 1_0
+      213: 6072884988399551171
+    second: 57a64b7b1293e89d0b2a71c013c1053e_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -113,13 +113,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: peanut 1_0
+      name: 57a64b7b1293e89d0b2a71c013c1053e_0
       rect:
         serializedVersion: 2
         x: 0
         y: 0
-        width: 284
-        height: 274
+        width: 1920
+        height: 1080
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -128,8 +128,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: e46a269d181417460800000000000000
-      internalID: 7237638102114805326
+      spriteID: 3c28b5fa8b8374450800000000000000
+      internalID: 6072884988399551171
       vertices: []
       indices: 
       edges: []
@@ -148,7 +148,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      peanut 1_0: 7237638102114805326
+      57a64b7b1293e89d0b2a71c013c1053e_0: 6072884988399551171
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
