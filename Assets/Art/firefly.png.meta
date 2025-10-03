@@ -131,10 +131,10 @@ TextureImporter:
       name: firefly_0
       rect:
         serializedVersion: 2
-        x: 0
-        y: 0
-        width: 1591
-        height: 676
+        x: 346
+        y: 585
+        width: 102
+        height: 91
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -153,10 +153,10 @@ TextureImporter:
       name: firefly_1
       rect:
         serializedVersion: 2
-        x: 179
-        y: 380
-        width: 78
-        height: 78
+        x: 160
+        y: 356
+        width: 117
+        height: 123
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -175,10 +175,10 @@ TextureImporter:
       name: firefly_2
       rect:
         serializedVersion: 2
-        x: 840
-        y: 375
-        width: 72
-        height: 71
+        x: 817
+        y: 350
+        width: 126
+        height: 126
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -259,6 +259,28 @@ TextureImporter:
       indices: 
       edges: []
       weights: []
+    - serializedVersion: 2
+      name: firefly_6
+      rect:
+        serializedVersion: 2
+        x: 14
+        y: 0
+        width: 345
+        height: 317
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: 69b872e802435438ca77b5f5b728253d
+      internalID: -1380203527
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
     outline: []
     customData: 
     physicsShape: []
@@ -279,6 +301,7 @@ TextureImporter:
       firefly_3: -1917053519489950776
       firefly_4: -5562731056848901280
       firefly_5: -2187094712674106869
+      firefly_6: -1380203527
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

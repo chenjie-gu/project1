@@ -301,6 +301,12 @@ public class PlayerMovement : MonoBehaviour
             {
                 spriteRenderer.sprite = flattenedSprite;
             }
+            
+            // Play flattening sound
+            if (SoundManager.Instance != null)
+            {
+                SoundManager.Instance.PlayPlayerFlattenSound();
+            }
         }
         else
         {
@@ -346,6 +352,12 @@ public class PlayerMovement : MonoBehaviour
     public void SetCarriedKey(Key key)
     {
         carried = key;
+    }
+    
+    // Check if player is carrying a small monster (for LargeMonster AI)
+    public bool IsCarryingSmallMonster()
+    {
+        return carried is SmallMonster;
     }
 
     void OnDrawGizmosSelected()

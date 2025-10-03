@@ -73,6 +73,12 @@ public class Door : MonoBehaviour
         var col = GetComponent<Collider2D>();
         if (col) col.enabled = false;
         UpdateVisuals();
+        
+        // Play door opening sound
+        if (SoundManager.Instance != null)
+        {
+            SoundManager.Instance.PlayDoorOpenSound();
+        }
     }
     
     public bool IsOpen()

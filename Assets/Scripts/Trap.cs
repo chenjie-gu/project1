@@ -25,6 +25,12 @@ public class Trap : MonoBehaviour
             var player = other.GetComponent<PlayerMovement>();
             if (player != null && isDeadly)
             {
+                // Play trap death sound
+                if (SoundManager.Instance != null)
+                {
+                    SoundManager.Instance.PlayTrapDeathSound();
+                }
+                
                 // Trigger game over
                 if (GameManager.Instance != null)
                 {
