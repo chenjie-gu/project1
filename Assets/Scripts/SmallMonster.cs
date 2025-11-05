@@ -9,27 +9,29 @@ public class SmallMonster : MonoBehaviour, ICarryable
     public enum State { Patrol, Charge, Return, Flattened, Carried }
 
     [Header("Patrol")]
-    public Transform leftPoint;         // set in Inspector
-    public Transform rightPoint;        // set in Inspector
-    public float speedX = 2f;           // patrol speed
-    public float waitAtEnds = 0.15f;    // pause at patrol edges
+    public Transform leftPoint;
+    public Transform rightPoint;
+    public float speedX = 2f;
+    public float waitAtEnds = 0.15f;
 
     [Header("Detect & Charge")]
-    public float detectionRangeY = 4f;  // ray length in facing direction
-    public LayerMask playerLayer;       // include only the Player layer
-    public float chargeSpeedZ = 5f;     // charge speed (Z > X)
-    public float chargeDistance = 6f;   // must be > detectionRangeY
+    public float detectionRangeY = 4f;
+    public LayerMask playerLayer;
+    public float preChargePause = 0.35f;     // NEW: pause before charging
+    public float chargeSpeedZ = 5f;
+    public float chargeDistance = 6f;
     public float postChargePause = 0.15f;
+    public float chargeBreakImpulse = 4.5f;  // threshold to break cages
 
     [Header("Flatten (by hammer)")]
-    public Sprite flattenedSprite;      // visual when flattened
+    public Sprite flattenedSprite;
     public bool canBeCarriedOnlyWhenFlattened = true;
 
     [Header("Carry Setup")]
-    public Vector2 holdLocalOffset = new Vector2(0f, 1.2f); // relative to CarryAnchor (or player)
+    public Vector2 holdLocalOffset = new Vector2(0f, 1.2f);
 
     [Header("Fail / Feedback")]
-    public bool failOnTouchPlayer = true; // only when not flattened
+    public bool failOnTouchPlayer = true;
 
     // --- runtime ---
     State state = State.Patrol;
@@ -39,18 +41,20 @@ public class SmallMonster : MonoBehaviour, ICarryable
 
     Vector2 startPos;
     bool movingToRight = true;
-    int facing = 1;              // +1 = right, -1 = left
+    int facing = 1;
     Vector2 velocity;
 
     Sprite normalSprite;
 
-    // Sorting (rendering) order handling when carried
-    int originalOrder;
-    int carriedOrder;
+    // sorting
+    int originalOrder, carriedOrder;
 
     // ICarryable
     public bool IsHeld { get; private set; } = false;
     public bool IsFlattened => state == State.Flattened || state == State.Carried;
+
+    // flag so cages know a hit came from a charge
+    public bool IsCharging { get; private set; } = false;   // NEW
 
     void Awake()
     {
@@ -65,9 +69,7 @@ public class SmallMonster : MonoBehaviour, ICarryable
         rb.interpolation = RigidbodyInterpolation2D.Interpolate;
 
         startPos = transform.position;
-
-        // capture initial sorting order for restore on drop
-        originalOrder = sr != null ? sr.sortingOrder : 0;
+        originalOrder = sr ? sr.sortingOrder : 0;
 
         if (leftPoint == null || rightPoint == null)
             Debug.LogWarning("SmallMonster: assign leftPoint and rightPoint for patrol.");
@@ -75,25 +77,22 @@ public class SmallMonster : MonoBehaviour, ICarryable
 
     void Update()
     {
-        if (state == State.Carried) return; // carried = no AI
+        if (state == State.Carried) return;
 
         switch (state)
         {
             case State.Patrol:
                 PatrolLogic();
-                if (PlayerDetected()) StartCoroutine(ChargeRoutine());
+                if (PlayerDetected()) StartCoroutine(ChargeRoutine()); // will include pause
                 break;
-
             case State.Return:
                 ReturnLogic();
                 break;
-
             case State.Flattened:
-                velocity = Vector2.zero; // stays still
+                velocity = Vector2.zero;
                 break;
-
             case State.Charge:
-                // handled by coroutine; keep current velocity
+                // handled in coroutine
                 break;
         }
     }
@@ -104,14 +103,9 @@ public class SmallMonster : MonoBehaviour, ICarryable
         rb.linearVelocity = velocity;
     }
 
-    // ---------- PATROL ----------
     void PatrolLogic()
     {
-        if (leftPoint == null || rightPoint == null)
-        {
-            velocity = Vector2.zero;
-            return;
-        }
+        if (!leftPoint || !rightPoint) { velocity = Vector2.zero; return; }
 
         Transform target = movingToRight ? rightPoint : leftPoint;
         facing = movingToRight ? 1 : -1;
@@ -119,7 +113,6 @@ public class SmallMonster : MonoBehaviour, ICarryable
         float dir = Mathf.Sign(target.position.x - transform.position.x);
         velocity = new Vector2(dir * speedX, 0f);
 
-        // arrived?
         if (Mathf.Abs(transform.position.x - target.position.x) < 0.05f)
         {
             velocity = Vector2.zero;
@@ -132,8 +125,7 @@ public class SmallMonster : MonoBehaviour, ICarryable
 
     IEnumerator EdgePause()
     {
-        float prev = speedX;
-        speedX = 0f;
+        float prev = speedX; speedX = 0f;
         yield return new WaitForSeconds(waitAtEnds);
         speedX = prev;
     }
@@ -150,6 +142,14 @@ public class SmallMonster : MonoBehaviour, ICarryable
     IEnumerator ChargeRoutine()
     {
         state = State.Charge;
+
+        // NEW: pre-charge pause (wind-up/telegraph)
+        velocity = Vector2.zero;
+        IsCharging = false;
+        yield return new WaitForSeconds(preChargePause);
+
+        // begin charge
+        IsCharging = true;
         velocity = new Vector2(facing * chargeSpeedZ, 0f);
 
         float traveled = 0f;
@@ -159,28 +159,24 @@ public class SmallMonster : MonoBehaviour, ICarryable
             yield return null;
         }
 
+        // end charge
+        IsCharging = false;
         velocity = Vector2.zero;
         yield return new WaitForSeconds(postChargePause);
 
-        if (WithinPatrolZone(transform.position.x))
-            state = State.Patrol;
-        else
-            state = State.Return;
+        state = WithinPatrolZone(transform.position.x) ? State.Patrol : State.Return;
     }
 
     void ReturnLogic()
     {
         float dir = Mathf.Sign(startPos.x - transform.position.x);
         facing = dir >= 0 ? 1 : -1;
-
         velocity = new Vector2(dir * speedX, 0f);
 
         if (Mathf.Abs(transform.position.x - startPos.x) < 0.05f)
         {
             transform.position = new Vector3(startPos.x, transform.position.y, transform.position.z);
             velocity = Vector2.zero;
-
-            // choose a patrol direction based on nearest edge
             if (leftPoint && rightPoint)
                 movingToRight = Mathf.Abs(rightPoint.position.x - startPos.x) >= Mathf.Abs(startPos.x - leftPoint.position.x);
             state = State.Patrol;
@@ -191,27 +187,27 @@ public class SmallMonster : MonoBehaviour, ICarryable
 
     bool WithinPatrolZone(float x)
     {
-        if (leftPoint == null || rightPoint == null) return true;
+        if (!leftPoint || !rightPoint) return true;
         float min = Mathf.Min(leftPoint.position.x, rightPoint.position.x);
         float max = Mathf.Max(leftPoint.position.x, rightPoint.position.x);
         return x >= min && x <= max;
     }
 
-    // ---------- FLATTEN (by hammer) ----------
     public void Flatten()
     {
-        if (state == State.Carried) return; // already on player
+        if (state == State.Carried) return;
         state = State.Flattened;
         velocity = Vector2.zero;
 
         if (flattenedSprite) sr.sprite = flattenedSprite;
 
         rb.linearVelocity = Vector2.zero;
-        rb.bodyType = RigidbodyType2D.Dynamic; // can rest on ground
-        col.isTrigger = false;                 // solid on ground
+        rb.bodyType = RigidbodyType2D.Dynamic;
+        col.isTrigger = false;
+        IsCharging = false;
     }
 
-    // ---------- ICarryable ----------
+    // ICarryable
     public void PickUp(Transform holder)
     {
         if (canBeCarriedOnlyWhenFlattened && !IsFlattened) return;
@@ -225,21 +221,17 @@ public class SmallMonster : MonoBehaviour, ICarryable
 
         rb.linearVelocity = Vector2.zero;
         rb.bodyType = RigidbodyType2D.Kinematic;
-        col.isTrigger = true; // avoid colliding with player/head
+        col.isTrigger = true;
 
         transform.SetParent(anchor);
         transform.localPosition = holdLocalOffset;
 
-        // — sorting: render just above the player while carried —
-        if (sr != null)
+        var holderSR = holder.GetComponentInChildren<SpriteRenderer>();
+        if (sr && holderSR)
         {
-            var holderSR = holder.GetComponentInChildren<SpriteRenderer>();
-            if (holderSR)
-            {
-                sr.sortingLayerID = holderSR.sortingLayerID;
-                carriedOrder = holderSR.sortingOrder + 1;
-                sr.sortingOrder = carriedOrder;
-            }
+            sr.sortingLayerID = holderSR.sortingLayerID;
+            carriedOrder = holderSR.sortingOrder + 1;
+            sr.sortingOrder = carriedOrder;
         }
     }
 
@@ -253,29 +245,35 @@ public class SmallMonster : MonoBehaviour, ICarryable
         rb.bodyType = RigidbodyType2D.Dynamic;
         col.isTrigger = false;
 
-        // remain flattened & non-hostile after drop
         state = State.Flattened;
         velocity = Vector2.zero;
 
-        // — restore original sorting order on the ground —
-        if (sr != null)
-            sr.sortingOrder = originalOrder;
+        if (sr) sr.sortingOrder = originalOrder;
     }
 
-    // ---------- Fail on player contact (when not flattened) ----------
-    void OnCollisionEnter2D(Collision2D collision)
+    // Break cage on charge impact, fail player on touch when hostile
+    void OnCollisionEnter2D(Collision2D c)
     {
-        if (!IsFlattened && failOnTouchPlayer && collision.collider.GetComponent<PlayerMovement>() != null)
+        // Breakable cage logic
+        if (IsCharging && c.collider.TryGetComponent<BreakableCage>(out var cage))
+        {
+            float impulse = c.relativeVelocity.magnitude;
+            if (impulse >= chargeBreakImpulse)
+            {
+                cage.Break();
+            }
+        }
+
+        // Player fail (only when not flattened)
+        if (!IsFlattened && failOnTouchPlayer && c.collider.GetComponent<PlayerMovement>() != null)
         {
             Debug.LogError("Player failed: hit by small monster!");
-            // TODO: call your game over / respawn logic here
+            // TODO: call your fail/respawn
         }
     }
 
-    // ---------- Gizmos ----------
     void OnDrawGizmosSelected()
     {
-        // patrol edges
         if (leftPoint && rightPoint)
         {
             Gizmos.color = Color.cyan;
@@ -285,7 +283,6 @@ public class SmallMonster : MonoBehaviour, ICarryable
             Gizmos.DrawSphere(rightPoint.position, 0.07f);
         }
 
-        // detection ray
         Gizmos.color = Color.red;
         int dir = (Application.isPlaying ? facing : 1);
         Vector3 origin = transform.position + new Vector3(0.1f * dir, 0f, 0f);
