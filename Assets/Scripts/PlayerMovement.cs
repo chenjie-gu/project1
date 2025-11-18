@@ -57,6 +57,9 @@ public class PlayerMovement : MonoBehaviour
 
     Coroutine flattenRoutine;
 
+    // ADDED: grace window for jumping right after a spike bounce
+    float _extraJumpWindowUntil = 0f;
+
     void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
@@ -83,8 +86,15 @@ public class PlayerMovement : MonoBehaviour
     {
         moveInput = Input.GetAxisRaw("Horizontal");
 
-        if (Input.GetKeyDown(jumpKey) && isGrounded)
-            jumpRequested = true;
+        // ADDED: allow jump if grounded OR within grace window (spike bounce)
+        if (Input.GetKeyDown(jumpKey))
+        {
+            if (isGrounded || Time.time <= _extraJumpWindowUntil)
+            {
+                jumpRequested = true;
+                _extraJumpWindowUntil = 0f; // consume the window
+            }
+        }
 
         if (Input.GetKeyDown(interactKey))
         {
@@ -197,7 +207,7 @@ public class PlayerMovement : MonoBehaviour
     // === Flattening ===
     public void SetFlattened(bool flattened)
     {
-    // Don’t allow unflatten while locked
+        // Don’t allow unflatten while locked
         if (!flattened && flattenLocked) return;
 
         if (isFlattened == flattened) return;
@@ -245,6 +255,11 @@ public class PlayerMovement : MonoBehaviour
         SetFlattened(false);
     }
 
+    // === Bounce/jump grace API (called by spikes) ===
+    public void GrantImmediateJumpWindow(float seconds)
+    {
+        _extraJumpWindowUntil = Mathf.Max(_extraJumpWindowUntil, Time.time + seconds);
+    }
 
     // === Carry helpers for Level 4 ===
     public bool IsCarryingSmallMonster()

@@ -8,21 +8,41 @@ public class SmallMonster : MonoBehaviour, ICarryable
 {
     public enum State { Patrol, Charge, Return, Flattened, Carried }
 
+    // ---------- Ground / Physics ----------
+    [Header("Ground Check")]
+    public Transform groundCheck;              // child under feet
+    public float groundCheckRadius = 0.2f;
+    public LayerMask groundLayer;              // include platforms/tiles
+    public float gravityScaleWhenAlive = 3f;   // >0 to avoid hovering
+    public bool requireGroundedToCharge = false;
+
+    // ---------- Patrol ----------
     [Header("Patrol")]
     public Transform leftPoint;
     public Transform rightPoint;
     public float speedX = 2f;
     public float waitAtEnds = 0.15f;
 
+    // ---------- Detection / Charge ----------
     [Header("Detect & Charge")]
     public float detectionRangeY = 4f;
     public LayerMask playerLayer;
-    public float preChargePause = 0.35f;     // NEW: pause before charging
-    public float chargeSpeedZ = 5f;
-    public float chargeDistance = 6f;
+    public float preChargePause = 0.35f;     // pause before charge
+    public float chargeSpeedZ = 5f;          // horizontal charge speed
+    public float chargeDistance = 6f;        // > detection range
     public float postChargePause = 0.15f;
     public float chargeBreakImpulse = 4.5f;  // threshold to break cages
 
+    // ---------- Player interaction (safety on top) ----------
+    [Header("Player Interaction")]
+    [Tooltip("Allow the player to stand/jump on top without dying.")]
+    public bool allowStandOnTop = true;
+    [Tooltip("Vertical tolerance for 'on top' test (world units).")]
+    public float topTolerance = 0.08f;
+    [Tooltip("Optional upward boost when player lands on top (0 = none).")]
+    public float stompBounce = 0f;
+
+    // ---------- Flatten / Carry ----------
     [Header("Flatten (by hammer)")]
     public Sprite flattenedSprite;
     public bool canBeCarriedOnlyWhenFlattened = true;
@@ -30,10 +50,11 @@ public class SmallMonster : MonoBehaviour, ICarryable
     [Header("Carry Setup")]
     public Vector2 holdLocalOffset = new Vector2(0f, 1.2f);
 
+    // ---------- Fail ----------
     [Header("Fail / Feedback")]
     public bool failOnTouchPlayer = true;
 
-    // --- runtime ---
+    // ---------- Runtime ----------
     State state = State.Patrol;
     Rigidbody2D rb;
     Collider2D col;
@@ -42,19 +63,20 @@ public class SmallMonster : MonoBehaviour, ICarryable
     Vector2 startPos;
     bool movingToRight = true;
     int facing = 1;
-    Vector2 velocity;
+    Vector2 desiredVel;              // write only X into rb.velocity
 
     Sprite normalSprite;
 
-    // sorting
+    // Sorting while carried
     int originalOrder, carriedOrder;
 
     // ICarryable
     public bool IsHeld { get; private set; } = false;
     public bool IsFlattened => state == State.Flattened || state == State.Carried;
 
-    // flag so cages know a hit came from a charge
-    public bool IsCharging { get; private set; } = false;   // NEW
+    // Flags
+    public bool IsCharging { get; private set; } = false;
+    bool isGrounded_SM;
 
     void Awake()
     {
@@ -64,15 +86,19 @@ public class SmallMonster : MonoBehaviour, ICarryable
 
         normalSprite = sr.sprite;
 
-        rb.gravityScale = 0f;
+        rb.bodyType = RigidbodyType2D.Dynamic;
+        rb.gravityScale = gravityScaleWhenAlive;
         rb.freezeRotation = true;
         rb.interpolation = RigidbodyInterpolation2D.Interpolate;
+        rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
 
         startPos = transform.position;
         originalOrder = sr ? sr.sortingOrder : 0;
 
-        if (leftPoint == null || rightPoint == null)
-            Debug.LogWarning("SmallMonster: assign leftPoint and rightPoint for patrol.");
+        if (!leftPoint || !rightPoint)
+            Debug.LogWarning("SmallMonster: assign leftPoint and rightPoint.");
+        if (!groundCheck)
+            Debug.LogWarning("SmallMonster: assign groundCheck under the feet.");
     }
 
     void Update()
@@ -83,39 +109,51 @@ public class SmallMonster : MonoBehaviour, ICarryable
         {
             case State.Patrol:
                 PatrolLogic();
-                if (PlayerDetected()) StartCoroutine(ChargeRoutine()); // will include pause
+                if ((!requireGroundedToCharge || isGrounded_SM) && PlayerDetected())
+                    StartCoroutine(ChargeRoutine());
                 break;
+
             case State.Return:
                 ReturnLogic();
                 break;
+
             case State.Flattened:
-                velocity = Vector2.zero;
+                desiredVel.x = 0f;
                 break;
+
             case State.Charge:
-                // handled in coroutine
+                // handled by coroutine
                 break;
         }
     }
 
     void FixedUpdate()
     {
+        // Ground check
+        if (groundCheck)
+            isGrounded_SM = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
+
         if (state == State.Carried) return;
-        rb.linearVelocity = velocity;
+
+        // Drive ONLY X so gravity & spike impulses affect Y
+        rb.linearVelocity = new Vector2(desiredVel.x, rb.linearVelocity.y);
     }
 
+    // ---------- Patrol ----------
     void PatrolLogic()
     {
-        if (!leftPoint || !rightPoint) { velocity = Vector2.zero; return; }
+        if (!leftPoint || !rightPoint) { desiredVel.x = 0f; return; }
 
         Transform target = movingToRight ? rightPoint : leftPoint;
         facing = movingToRight ? 1 : -1;
 
         float dir = Mathf.Sign(target.position.x - transform.position.x);
-        velocity = new Vector2(dir * speedX, 0f);
+        desiredVel.x = dir * speedX;
 
+        // arrived?
         if (Mathf.Abs(transform.position.x - target.position.x) < 0.05f)
         {
-            velocity = Vector2.zero;
+            desiredVel.x = 0f;
             movingToRight = !movingToRight;
             StartCoroutine(EdgePause());
         }
@@ -143,25 +181,25 @@ public class SmallMonster : MonoBehaviour, ICarryable
     {
         state = State.Charge;
 
-        // NEW: pre-charge pause (wind-up/telegraph)
-        velocity = Vector2.zero;
+        // wind-up telegraph
+        desiredVel.x = 0f;
         IsCharging = false;
         yield return new WaitForSeconds(preChargePause);
 
-        // begin charge
+        // begin charge (horizontal)
         IsCharging = true;
-        velocity = new Vector2(facing * chargeSpeedZ, 0f);
+        desiredVel.x = facing * chargeSpeedZ;
 
         float traveled = 0f;
         while (traveled < chargeDistance && state == State.Charge)
         {
-            traveled += Mathf.Abs(velocity.x) * Time.deltaTime;
+            traveled += Mathf.Abs(desiredVel.x) * Time.deltaTime;
             yield return null;
         }
 
         // end charge
         IsCharging = false;
-        velocity = Vector2.zero;
+        desiredVel.x = 0f;
         yield return new WaitForSeconds(postChargePause);
 
         state = WithinPatrolZone(transform.position.x) ? State.Patrol : State.Return;
@@ -171,14 +209,16 @@ public class SmallMonster : MonoBehaviour, ICarryable
     {
         float dir = Mathf.Sign(startPos.x - transform.position.x);
         facing = dir >= 0 ? 1 : -1;
-        velocity = new Vector2(dir * speedX, 0f);
+        desiredVel.x = dir * speedX;
 
         if (Mathf.Abs(transform.position.x - startPos.x) < 0.05f)
         {
             transform.position = new Vector3(startPos.x, transform.position.y, transform.position.z);
-            velocity = Vector2.zero;
+            desiredVel.x = 0f;
+
             if (leftPoint && rightPoint)
                 movingToRight = Mathf.Abs(rightPoint.position.x - startPos.x) >= Mathf.Abs(startPos.x - leftPoint.position.x);
+
             state = State.Patrol;
         }
 
@@ -193,21 +233,21 @@ public class SmallMonster : MonoBehaviour, ICarryable
         return x >= min && x <= max;
     }
 
+    // ---------- Flatten by Hammer ----------
     public void Flatten()
     {
         if (state == State.Carried) return;
         state = State.Flattened;
-        velocity = Vector2.zero;
+        desiredVel.x = 0f;
 
         if (flattenedSprite) sr.sprite = flattenedSprite;
 
-        rb.linearVelocity = Vector2.zero;
-        rb.bodyType = RigidbodyType2D.Dynamic;
+        rb.gravityScale = gravityScaleWhenAlive;
         col.isTrigger = false;
         IsCharging = false;
     }
 
-    // ICarryable
+    // ---------- ICarryable ----------
     public void PickUp(Transform holder)
     {
         if (canBeCarriedOnlyWhenFlattened && !IsFlattened) return;
@@ -217,15 +257,17 @@ public class SmallMonster : MonoBehaviour, ICarryable
 
         IsHeld = true;
         state = State.Carried;
-        velocity = Vector2.zero;
+        desiredVel.x = 0f;
 
         rb.linearVelocity = Vector2.zero;
         rb.bodyType = RigidbodyType2D.Kinematic;
+        rb.gravityScale = 0f;
         col.isTrigger = true;
 
         transform.SetParent(anchor);
         transform.localPosition = holdLocalOffset;
 
+        // render above the player
         var holderSR = holder.GetComponentInChildren<SpriteRenderer>();
         if (sr && holderSR)
         {
@@ -243,37 +285,92 @@ public class SmallMonster : MonoBehaviour, ICarryable
         transform.SetParent(null);
 
         rb.bodyType = RigidbodyType2D.Dynamic;
+        rb.gravityScale = gravityScaleWhenAlive;
         col.isTrigger = false;
 
-        state = State.Flattened;
-        velocity = Vector2.zero;
+        state = State.Flattened;  // remains non-hostile
+        desiredVel.x = 0f;
 
         if (sr) sr.sortingOrder = originalOrder;
     }
 
-    // Break cage on charge impact, fail player on touch when hostile
+    // ---------- Player safety on top / cage break / fail ----------
+    // Is the player standing on top of the monster?
+    bool IsPlayerOnTop(PlayerMovement player)
+    {
+        if (!allowStandOnTop || player == null || col == null) return false;
+        var pCol = player.GetComponent<Collider2D>();
+        if (pCol == null) return false;
+
+        Bounds pb = pCol.bounds;
+        Bounds mb = col.bounds;
+        return pb.min.y >= (mb.max.y - topTolerance);
+    }
+
     void OnCollisionEnter2D(Collision2D c)
     {
-        // Breakable cage logic
-        if (IsCharging && c.collider.TryGetComponent<BreakableCage>(out var cage))
+        // Cage break during charge
+        var cage = c.collider.GetComponent<BreakableCage>()
+               ?? c.collider.GetComponentInParent<BreakableCage>()
+               ?? c.collider.GetComponentInChildren<BreakableCage>();
+
+        if (IsCharging && cage != null && !c.collider.isTrigger)
         {
-            float impulse = c.relativeVelocity.magnitude;
-            if (impulse >= chargeBreakImpulse)
-            {
+            float rel = c.relativeVelocity.magnitude;
+            float speed = Mathf.Abs(rb.linearVelocity.x);
+            float measured = Mathf.Max(rel, speed);
+            if (measured >= chargeBreakImpulse)
                 cage.Break();
-            }
         }
 
-        // Player fail (only when not flattened)
-        if (!IsFlattened && failOnTouchPlayer && c.collider.GetComponent<PlayerMovement>() != null)
+        // Player interaction
+        var player = c.collider.GetComponent<PlayerMovement>();
+        if (player != null)
         {
-            Debug.LogError("Player failed: hit by small monster!");
-            // TODO: call your fail/respawn
+            // never hostile when flattened or carried
+            if (IsFlattened || state == State.Carried) return;
+
+            // allow platform use / stomp from top
+            if (IsPlayerOnTop(player))
+            {
+                if (stompBounce > 0f)
+                {
+                    var prb = player.GetComponent<Rigidbody2D>();
+                    if (prb) prb.linearVelocity = new Vector2(prb.linearVelocity.x, Mathf.Max(prb.linearVelocity.y, stompBounce));
+                }
+                return; // no fail
+            }
+
+            // side/front contact is hostile
+            if (failOnTouchPlayer)
+            {
+                Debug.LogError("Player failed: hit by small monster (side/front).");
+                // TODO: call your game-over/respawn logic
+            }
         }
     }
 
+    void OnCollisionStay2D(Collision2D c)
+    {
+        var player = c.collider.GetComponent<PlayerMovement>();
+        if (player == null) return;
+
+        if (IsFlattened || state == State.Carried) return;
+
+        if (IsPlayerOnTop(player))
+            return; // safe while standing
+
+        if (failOnTouchPlayer)
+        {
+            Debug.LogError("Player failed: sustained contact with small monster (side/front).");
+            // TODO: game-over hook
+        }
+    }
+
+    // ---------- Gizmos ----------
     void OnDrawGizmosSelected()
     {
+        // patrol edges
         if (leftPoint && rightPoint)
         {
             Gizmos.color = Color.cyan;
@@ -283,9 +380,17 @@ public class SmallMonster : MonoBehaviour, ICarryable
             Gizmos.DrawSphere(rightPoint.position, 0.07f);
         }
 
+        // detection ray
         Gizmos.color = Color.red;
         int dir = (Application.isPlaying ? facing : 1);
         Vector3 origin = transform.position + new Vector3(0.1f * dir, 0f, 0f);
         Gizmos.DrawLine(origin, origin + new Vector3(detectionRangeY * dir, 0f, 0f));
+
+        // ground check gizmo
+        if (groundCheck)
+        {
+            Gizmos.color = Color.green;
+            Gizmos.DrawWireSphere(groundCheck.position, groundCheckRadius);
+        }
     }
 }
