@@ -6,7 +6,7 @@ using System.Collections;
 [RequireComponent(typeof(SpriteRenderer))]
 public class SmallMonster : MonoBehaviour, ICarryable
 {
-    // 新增了 StunnedAirborne (滞空) 和 Dead (卡在尖刺上) 状态
+    // 新增了 StunnedAirborne (滞空) 和 Dead (卡在尖刺上/撞死) 状态
     public enum State { Patrol, Charge, Return, Flattened, Carried, StunnedAirborne, Dead }
 
     // ---------- Ground / Physics ----------
@@ -147,7 +147,7 @@ public class SmallMonster : MonoBehaviour, ICarryable
                 break;
 
             case State.Dead:
-                desiredVel.x = 0f; // 死在尖刺上，完全不动
+                desiredVel.x = 0f; // 死在尖刺上或撞死，完全不动
                 break;
         }
     }
@@ -185,9 +185,7 @@ public class SmallMonster : MonoBehaviour, ICarryable
             // 设为 Kinematic 让它不再受重力或弹力影响，死死粘在尖刺上
             rb.bodyType = RigidbodyType2D.Kinematic;
 
-            // 确保碰撞体还在（作为平台），但可能需要关闭 Trigger 如果你有特殊需求
-            // 这里保持原样，它就是一个固体方块
-
+            // 确保碰撞体还在（作为平台）
             state = State.Dead;
             StopAllCoroutines();
             return;
@@ -311,8 +309,16 @@ public class SmallMonster : MonoBehaviour, ICarryable
     // ---------- ICarryable ----------
     public void PickUp(Transform holder)
     {
-        if (canBeCarriedOnlyWhenFlattened && !IsFlattened) return;
-        if (state == State.Dead) return; // 死了（粘在尖刺上）就不能被拔出来了
+        // 修改点 1: 定义什么是“可被抓取”的状态
+        // 现在允许：压扁状态 (Flattened) 或者 死亡状态 (Dead)
+        bool isPickable = IsFlattened || state == State.Dead;
+
+        // 如果设置了“只能在压扁时抓取”，但当前既不是压扁也不是死亡，就不让抓
+        // (也就是说，活蹦乱跳巡逻的时候还是不能抓，但撞死或者被砸扁后可以抓)
+        if (canBeCarriedOnlyWhenFlattened && !isPickable) return;
+
+        // 修改点 2: 删除了之前 "if (state == State.Dead) return;" 的限制
+        // 现在的逻辑是：即使它死在笼子旁或者尖刺上，你也能把它拔出来
 
         Transform anchor = holder.Find("CarryAnchor");
         if (anchor == null) anchor = holder;
@@ -321,14 +327,16 @@ public class SmallMonster : MonoBehaviour, ICarryable
         state = State.Carried;
         desiredVel.x = 0f;
 
+        // 变成运动学刚体，跟随玩家
         rb.linearVelocity = Vector2.zero;
         rb.bodyType = RigidbodyType2D.Kinematic;
         rb.gravityScale = 0f;
-        col.isTrigger = true;
+        col.isTrigger = true; // 变成触发器，防止在手里撞来撞去
 
         transform.SetParent(anchor);
         transform.localPosition = holdLocalOffset;
 
+        // 调整图层顺序，让它显示在玩家前面
         var holderSR = holder.GetComponentInChildren<SpriteRenderer>();
         if (sr && holderSR)
         {
@@ -368,25 +376,48 @@ public class SmallMonster : MonoBehaviour, ICarryable
         return pb.min.y >= (mb.max.y - topTolerance);
     }
 
+    // 这个就是导致你报错的方法，我已经把它们合并好了
     void OnCollisionEnter2D(Collision2D c)
     {
-        // 1. 滞空或死亡状态下，对所有碰撞无害化
+        // 1. 如果已经滞空或死亡，忽略碰撞逻辑
         if (state == State.StunnedAirborne || state == State.Dead) return;
 
-        // Cage break
+        // --- 笼子交互逻辑 ---
         var cage = c.collider.GetComponent<BreakableCage>()
                 ?? c.collider.GetComponentInParent<BreakableCage>()
                 ?? c.collider.GetComponentInChildren<BreakableCage>();
 
-        if (IsCharging && cage != null && !c.collider.isTrigger)
+        // 检查是否撞到了笼子（不需要非得是冲锋状态，只要速度够快或者正在冲锋都可以）
+        if (cage != null && !c.collider.isTrigger)
         {
             float rel = c.relativeVelocity.magnitude;
             float speed = Mathf.Abs(rb.linearVelocity.x);
-            if (Mathf.Max(rel, speed) >= chargeBreakImpulse)
-                cage.Break();
+
+            // 我把阈值稍微降低了，防止因为摩擦力减速导致撞不碎
+            // 只要处于冲锋状态，或者速度超过 3，或者相对撞击力超过 2，都算撞碎
+            if (IsCharging || speed > 3f || rel >= 2.0f)
+            {
+                // A. 打破笼子 (传入自己的 collider 以忽略碰撞)
+                cage.Break(col);
+
+                // B. 让怪物彻底停下
+                rb.linearVelocity = Vector2.zero;
+                desiredVel.x = 0f;
+                IsCharging = false;
+                StopAllCoroutines(); // 停止冲锋协程
+
+                // C. 【关键修改】切换为 Kinematic，像钉子一样钉在原地
+                // 这样任何物理力（包括 Key 的弹力）都无法推动它
+                rb.bodyType = RigidbodyType2D.Kinematic;
+
+                // 设置为 Dead
+                state = State.Dead;
+
+                return; // 结束逻辑
+            }
         }
 
-        // Player interaction
+        // --- 玩家交互逻辑 (保持原样) ---
         var player = c.collider.GetComponent<PlayerMovement>();
         if (player != null)
         {
@@ -405,7 +436,7 @@ public class SmallMonster : MonoBehaviour, ICarryable
             if (failOnTouchPlayer)
             {
                 Debug.LogError("Player failed: hit by small monster.");
-                // TODO: Call Game Over
+                // TODO: Game Over logic
             }
         }
     }

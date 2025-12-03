@@ -978,7 +978,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BreakableCage
   keyObject: {fileID: 1999525039}
-  disableKeyUntilBroken: 1
+  disableKeyUntilBroken: 0
   hideCompletelyWhenBroken: 1
   destroyAfterBroken: 0
   destroyDelay: 0.25
@@ -1902,7 +1902,7 @@ Rigidbody2D:
   m_Interpolate: 0
   m_SleepingMode: 1
   m_CollisionDetection: 0
-  m_Constraints: 0
+  m_Constraints: 4
 --- !u!70 &1999525042
 CapsuleCollider2D:
   m_ObjectHideFlags: 0
