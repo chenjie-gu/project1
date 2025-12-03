@@ -1,24 +1,23 @@
 using UnityEngine;
 
-/// <summary>
-/// Simple “jail/cage” that blocks the player and contains a Key (or any ICarryable).
-/// Breaks when hit by a charging SmallMonster with sufficient impulse.
-/// </summary>
+/// Blocks the player and contains a Key (or any ICarryable).
+/// Becomes invisible/non-solid when broken; releases the key with real physics.
 [RequireComponent(typeof(BoxCollider2D))]
 [RequireComponent(typeof(SpriteRenderer))]
 public class BreakableCage : MonoBehaviour
 {
     [Header("Contents")]
-    public GameObject keyObject;          // assign the Key GameObject (can be a prefab child)
-    public bool disableKeyUntilBroken = true;
+    public GameObject keyObject;                 // assign the Key object (can be a child)
+    public bool disableKeyUntilBroken = true;    // hide/disable key until cage breaks
 
     [Header("Visuals")]
-    public Sprite intactSprite;
-    public Sprite brokenSprite;
+    public bool hideCompletelyWhenBroken = true; // turn the renderer off (invisible)
+    public bool destroyAfterBroken = false;      // optional cleanup after a short delay
+    public float destroyDelay = 0.25f;
 
     [Header("Physics")]
-    public bool becomeNonSolidWhenBroken = true; // turn collider into trigger (or disable)
-    public bool dropKeyOnGround = true;          // nudge key down onto ground
+    public bool removeColliderWhenBroken = true; // disables collider so it's non-solid
+    public float keyDropYOffset = 0.06f;         // small nudge so key rests on ground
 
     BoxCollider2D col;
     SpriteRenderer sr;
@@ -29,54 +28,46 @@ public class BreakableCage : MonoBehaviour
         col = GetComponent<BoxCollider2D>();
         sr  = GetComponent<SpriteRenderer>();
 
-    // Fallback: if you didn’t assign Intact Sprite, use whatever the SR has now
-        if (!intactSprite && sr) intactSprite = sr.sprite;
-
-        if (disableKeyUntilBroken && keyObject) SetKeyActive(false);
-        if (intactSprite && sr) sr.sprite = intactSprite;
+        if (disableKeyUntilBroken && keyObject)
+            SetKeyActive(false);
     }
 
-
+    /// <summary>Call this from SmallMonster (already happens in your charge collision).</summary>
     public void Break()
     {
         if (isBroken) return;
         isBroken = true;
 
-        // visuals
-        if (brokenSprite && sr) sr.sprite = brokenSprite;
+        // Make the cage invisible and non-solid
+        if (hideCompletelyWhenBroken && sr) sr.enabled = false;
+        if (removeColliderWhenBroken && col) col.enabled = false;
 
-        // physics: stop blocking
-        if (becomeNonSolidWhenBroken)
-        {
-            // simplest: become a trigger so player can walk through debris
-            col.isTrigger = true;
-        }
-
-        // release key
+        // Release the key with proper physics
         if (keyObject)
         {
+            // If the key is a child, unparent first so it’s free
+            keyObject.transform.SetParent(null);
             SetKeyActive(true);
 
-            if (dropKeyOnGround)
-            {
-                // place right below the cage
-                var rb = keyObject.GetComponent<Rigidbody2D>();
-                if (rb != null) rb.bodyType = RigidbodyType2D.Dynamic;
+            // Put it just below the cage so it doesn’t overlap and get ejected
+            Vector3 p = keyObject.transform.position;
+            float halfY = col ? col.bounds.extents.y : 0.25f;
+            keyObject.transform.position = new Vector3(p.x, transform.position.y - halfY - keyDropYOffset, p.z);
 
-                // small downward nudge so it rests on the floor
-                keyObject.transform.position = new Vector3(
-                    keyObject.transform.position.x,
-                    transform.position.y - col.bounds.extents.y - 0.05f,
-                    keyObject.transform.position.z
-                );
+            // Ensure proper physics state
+            var rb = keyObject.GetComponent<Rigidbody2D>();
+            if (!rb) rb = keyObject.AddComponent<Rigidbody2D>();
+            rb.bodyType = RigidbodyType2D.Dynamic;
+            rb.gravityScale = 1f;
+            rb.linearVelocity = Vector2.zero;
+            rb.angularVelocity = 0f;
+            rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
 
-                var keyCol = keyObject.GetComponent<Collider2D>();
-                if (keyCol) keyCol.isTrigger = false;
-            }
+            var keyCol = keyObject.GetComponent<Collider2D>();
+            if (keyCol) keyCol.isTrigger = false;
         }
 
-        // (optional) play sound/particles here
-        // AudioSource.PlayClipAtPoint(breakClip, transform.position);
+        if (destroyAfterBroken) Destroy(gameObject, destroyDelay);
     }
 
     void SetKeyActive(bool on)
