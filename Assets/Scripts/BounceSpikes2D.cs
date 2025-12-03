@@ -81,6 +81,10 @@ public class BounceSpikes2D : MonoBehaviour
     private static readonly Dictionary<int, Coroutine> s_apexCoroutines = new();
     private static readonly Dictionary<int, float>     s_savedGravity    = new();
 
+    public enum State { Patrol, Charge, Return, Flattened, Carried, StunnedAirborne, Dead }
+    bool isGrounded_SM;
+    bool _hasBouncedOnce = false; // <--- 新增这个标记
+
     void Awake()
     {
         trig = GetComponent<Collider2D>();
@@ -166,6 +170,12 @@ public class BounceSpikes2D : MonoBehaviour
         v.y = Mathf.Max(v.y, bounceVelocity);
         if (zeroHorizontalOnBounce) v.x = 0f;
         rb.linearVelocity = v;
+
+        SmallMonster monster = other.GetComponent<SmallMonster>();
+        if (monster != null)
+        {
+            monster.OnSpikeLaunch();
+        }
 
         int id = rb.GetInstanceID();
         s_lastBounceTime[id] = Time.time;

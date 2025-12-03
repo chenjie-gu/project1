@@ -6,14 +6,15 @@ using System.Collections;
 [RequireComponent(typeof(SpriteRenderer))]
 public class SmallMonster : MonoBehaviour, ICarryable
 {
-    public enum State { Patrol, Charge, Return, Flattened, Carried }
+    // 新增了 StunnedAirborne (滞空) 和 Dead (卡在尖刺上) 状态
+    public enum State { Patrol, Charge, Return, Flattened, Carried, StunnedAirborne, Dead }
 
     // ---------- Ground / Physics ----------
     [Header("Ground Check")]
-    public Transform groundCheck;              // child under feet
+    public Transform groundCheck;
     public float groundCheckRadius = 0.2f;
-    public LayerMask groundLayer;              // include platforms/tiles
-    public float gravityScaleWhenAlive = 3f;   // >0 to avoid hovering
+    public LayerMask groundLayer;
+    public float gravityScaleWhenAlive = 3f;
     public bool requireGroundedToCharge = false;
 
     // ---------- Patrol ----------
@@ -27,13 +28,13 @@ public class SmallMonster : MonoBehaviour, ICarryable
     [Header("Detect & Charge")]
     public float detectionRangeY = 4f;
     public LayerMask playerLayer;
-    public float preChargePause = 0.35f;     // pause before charge
-    public float chargeSpeedZ = 5f;          // horizontal charge speed
-    public float chargeDistance = 6f;        // > detection range
+    public float preChargePause = 0.35f;
+    public float chargeSpeedZ = 5f;
+    public float chargeDistance = 6f;
     public float postChargePause = 0.15f;
-    public float chargeBreakImpulse = 4.5f;  // threshold to break cages
+    public float chargeBreakImpulse = 4.5f;
 
-    // ---------- Player interaction (safety on top) ----------
+    // ---------- Player Interaction ----------
     [Header("Player Interaction")]
     [Tooltip("Allow the player to stand/jump on top without dying.")]
     public bool allowStandOnTop = true;
@@ -55,7 +56,7 @@ public class SmallMonster : MonoBehaviour, ICarryable
     public bool failOnTouchPlayer = true;
 
     // ---------- Runtime ----------
-    State state = State.Patrol;
+    public State state = State.Patrol; // Public for debugging
     Rigidbody2D rb;
     Collider2D col;
     SpriteRenderer sr;
@@ -63,20 +64,21 @@ public class SmallMonster : MonoBehaviour, ICarryable
     Vector2 startPos;
     bool movingToRight = true;
     int facing = 1;
-    Vector2 desiredVel;              // write only X into rb.velocity
+    Vector2 desiredVel;
 
     Sprite normalSprite;
-
-    // Sorting while carried
     int originalOrder, carriedOrder;
 
     // ICarryable
     public bool IsHeld { get; private set; } = false;
     public bool IsFlattened => state == State.Flattened || state == State.Carried;
-
-    // Flags
     public bool IsCharging { get; private set; } = false;
+
     bool isGrounded_SM;
+
+    // --- 新增变量 ---
+    bool _hasBouncedOnce = false;      // 记录是否已经弹过一次
+    float _ignoreGroundCheckUntil = 0f;// 防止起跳瞬间被判定为落地
 
     void Awake()
     {
@@ -105,10 +107,18 @@ public class SmallMonster : MonoBehaviour, ICarryable
     {
         if (state == State.Carried) return;
 
+        // 确保朝向更新：如果有速度，就朝向速度方向（解决出生时朝向错误的问题）
+        if (Mathf.Abs(desiredVel.x) > 0.1f)
+        {
+            facing = (int)Mathf.Sign(desiredVel.x);
+            if (sr) sr.flipX = (facing < 0);
+        }
+
         switch (state)
         {
             case State.Patrol:
                 PatrolLogic();
+                // 只有在巡逻时才检测玩家
                 if ((!requireGroundedToCharge || isGrounded_SM) && PlayerDetected())
                     StartCoroutine(ChargeRoutine());
                 break;
@@ -124,6 +134,21 @@ public class SmallMonster : MonoBehaviour, ICarryable
             case State.Charge:
                 // handled by coroutine
                 break;
+
+            case State.StunnedAirborne:
+                desiredVel.x = 0f; // 空中禁止水平移动
+
+                // 落地检测：缓冲期过后 + 接地 + 垂直速度向下或静止
+                if (Time.time > _ignoreGroundCheckUntil && isGrounded_SM && rb.linearVelocity.y <= 0.1f)
+                {
+                    // 落地后恢复巡逻 (或者你可以改成 State.Dead 让它落地就死)
+                    state = State.Patrol;
+                }
+                break;
+
+            case State.Dead:
+                desiredVel.x = 0f; // 死在尖刺上，完全不动
+                break;
         }
     }
 
@@ -133,10 +158,49 @@ public class SmallMonster : MonoBehaviour, ICarryable
         if (groundCheck)
             isGrounded_SM = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
 
-        if (state == State.Carried) return;
+        if (state == State.Carried || state == State.Dead) return;
 
         // Drive ONLY X so gravity & spike impulses affect Y
-        rb.linearVelocity = new Vector2(desiredVel.x, rb.linearVelocity.y);
+        // Dead 状态下我们可能会设为 Kinematic，所以不需要这行
+        if (rb.bodyType == RigidbodyType2D.Dynamic)
+        {
+            rb.linearVelocity = new Vector2(desiredVel.x, rb.linearVelocity.y);
+        }
+    }
+
+    // ---------- Spike Interaction (New) ----------
+
+    // 由 BounceSpikes2D.cs 调用
+    public void OnSpikeLaunch()
+    {
+        // 如果被拿着，先强制掉落
+        if (IsHeld) Drop();
+
+        // 1. 如果这是第二次碰到尖刺（已经弹过一次了）
+        if (_hasBouncedOnce)
+        {
+            // 立即停止所有运动
+            rb.linearVelocity = Vector2.zero;
+
+            // 设为 Kinematic 让它不再受重力或弹力影响，死死粘在尖刺上
+            rb.bodyType = RigidbodyType2D.Kinematic;
+
+            // 确保碰撞体还在（作为平台），但可能需要关闭 Trigger 如果你有特殊需求
+            // 这里保持原样，它就是一个固体方块
+
+            state = State.Dead;
+            StopAllCoroutines();
+            return;
+        }
+
+        // 2. 如果是第一次碰到尖刺 -> 起飞
+        _hasBouncedOnce = true;
+        state = State.StunnedAirborne;
+        IsCharging = false;
+        StopAllCoroutines(); // 停止冲锋等
+
+        // 给予 0.2秒 的落地检测宽限期
+        _ignoreGroundCheckUntil = Time.time + 0.2f;
     }
 
     // ---------- Patrol ----------
@@ -145,7 +209,6 @@ public class SmallMonster : MonoBehaviour, ICarryable
         if (!leftPoint || !rightPoint) { desiredVel.x = 0f; return; }
 
         Transform target = movingToRight ? rightPoint : leftPoint;
-        facing = movingToRight ? 1 : -1;
 
         float dir = Mathf.Sign(target.position.x - transform.position.x);
         desiredVel.x = dir * speedX;
@@ -157,8 +220,6 @@ public class SmallMonster : MonoBehaviour, ICarryable
             movingToRight = !movingToRight;
             StartCoroutine(EdgePause());
         }
-
-        if (sr) sr.flipX = (facing < 0);
     }
 
     IEnumerator EdgePause()
@@ -170,10 +231,13 @@ public class SmallMonster : MonoBehaviour, ICarryable
 
     bool PlayerDetected()
     {
+        // 修正后的射线检测逻辑
         Vector2 origin = (Vector2)transform.position + new Vector2(0.1f * facing, 0f);
         Vector2 dir = new Vector2(facing, 0f);
         RaycastHit2D hit = Physics2D.Raycast(origin, dir, detectionRangeY, playerLayer);
         Debug.DrawRay(origin, dir * detectionRangeY, Color.red, 0.05f);
+
+        // 只有打中且带有 PlayerMovement 组件才算
         return hit.collider != null && hit.collider.GetComponent<PlayerMovement>() != null;
     }
 
@@ -181,12 +245,12 @@ public class SmallMonster : MonoBehaviour, ICarryable
     {
         state = State.Charge;
 
-        // wind-up telegraph
+        // wind-up
         desiredVel.x = 0f;
         IsCharging = false;
         yield return new WaitForSeconds(preChargePause);
 
-        // begin charge (horizontal)
+        // charge
         IsCharging = true;
         desiredVel.x = facing * chargeSpeedZ;
 
@@ -197,7 +261,7 @@ public class SmallMonster : MonoBehaviour, ICarryable
             yield return null;
         }
 
-        // end charge
+        // end
         IsCharging = false;
         desiredVel.x = 0f;
         yield return new WaitForSeconds(postChargePause);
@@ -208,7 +272,6 @@ public class SmallMonster : MonoBehaviour, ICarryable
     void ReturnLogic()
     {
         float dir = Mathf.Sign(startPos.x - transform.position.x);
-        facing = dir >= 0 ? 1 : -1;
         desiredVel.x = dir * speedX;
 
         if (Mathf.Abs(transform.position.x - startPos.x) < 0.05f)
@@ -221,8 +284,6 @@ public class SmallMonster : MonoBehaviour, ICarryable
 
             state = State.Patrol;
         }
-
-        if (sr) sr.flipX = (facing < 0);
     }
 
     bool WithinPatrolZone(float x)
@@ -236,7 +297,7 @@ public class SmallMonster : MonoBehaviour, ICarryable
     // ---------- Flatten by Hammer ----------
     public void Flatten()
     {
-        if (state == State.Carried) return;
+        if (state == State.Carried || state == State.Dead) return; // 死掉后或者被抓着不能再被砸
         state = State.Flattened;
         desiredVel.x = 0f;
 
@@ -251,6 +312,7 @@ public class SmallMonster : MonoBehaviour, ICarryable
     public void PickUp(Transform holder)
     {
         if (canBeCarriedOnlyWhenFlattened && !IsFlattened) return;
+        if (state == State.Dead) return; // 死了（粘在尖刺上）就不能被拔出来了
 
         Transform anchor = holder.Find("CarryAnchor");
         if (anchor == null) anchor = holder;
@@ -267,7 +329,6 @@ public class SmallMonster : MonoBehaviour, ICarryable
         transform.SetParent(anchor);
         transform.localPosition = holdLocalOffset;
 
-        // render above the player
         var holderSR = holder.GetComponentInChildren<SpriteRenderer>();
         if (sr && holderSR)
         {
@@ -288,14 +349,14 @@ public class SmallMonster : MonoBehaviour, ICarryable
         rb.gravityScale = gravityScaleWhenAlive;
         col.isTrigger = false;
 
-        state = State.Flattened;  // remains non-hostile
+        // Drop 后默认为 Flattened 状态
+        state = State.Flattened;
         desiredVel.x = 0f;
 
         if (sr) sr.sortingOrder = originalOrder;
     }
 
-    // ---------- Player safety on top / cage break / fail ----------
-    // Is the player standing on top of the monster?
+    // ---------- Collision / Safety / Fail ----------
     bool IsPlayerOnTop(PlayerMovement player)
     {
         if (!allowStandOnTop || player == null || col == null) return false;
@@ -309,17 +370,19 @@ public class SmallMonster : MonoBehaviour, ICarryable
 
     void OnCollisionEnter2D(Collision2D c)
     {
-        // Cage break during charge
+        // 1. 滞空或死亡状态下，对所有碰撞无害化
+        if (state == State.StunnedAirborne || state == State.Dead) return;
+
+        // Cage break
         var cage = c.collider.GetComponent<BreakableCage>()
-               ?? c.collider.GetComponentInParent<BreakableCage>()
-               ?? c.collider.GetComponentInChildren<BreakableCage>();
+                ?? c.collider.GetComponentInParent<BreakableCage>()
+                ?? c.collider.GetComponentInChildren<BreakableCage>();
 
         if (IsCharging && cage != null && !c.collider.isTrigger)
         {
             float rel = c.relativeVelocity.magnitude;
             float speed = Mathf.Abs(rb.linearVelocity.x);
-            float measured = Mathf.Max(rel, speed);
-            if (measured >= chargeBreakImpulse)
+            if (Mathf.Max(rel, speed) >= chargeBreakImpulse)
                 cage.Break();
         }
 
@@ -327,10 +390,8 @@ public class SmallMonster : MonoBehaviour, ICarryable
         var player = c.collider.GetComponent<PlayerMovement>();
         if (player != null)
         {
-            // never hostile when flattened or carried
             if (IsFlattened || state == State.Carried) return;
 
-            // allow platform use / stomp from top
             if (IsPlayerOnTop(player))
             {
                 if (stompBounce > 0f)
@@ -338,39 +399,36 @@ public class SmallMonster : MonoBehaviour, ICarryable
                     var prb = player.GetComponent<Rigidbody2D>();
                     if (prb) prb.linearVelocity = new Vector2(prb.linearVelocity.x, Mathf.Max(prb.linearVelocity.y, stompBounce));
                 }
-                return; // no fail
+                return;
             }
 
-            // side/front contact is hostile
             if (failOnTouchPlayer)
             {
-                Debug.LogError("Player failed: hit by small monster (side/front).");
-                // TODO: call your game-over/respawn logic
+                Debug.LogError("Player failed: hit by small monster.");
+                // TODO: Call Game Over
             }
         }
     }
 
     void OnCollisionStay2D(Collision2D c)
     {
+        // 持续接触无害化
+        if (state == State.StunnedAirborne || state == State.Dead) return;
+
         var player = c.collider.GetComponent<PlayerMovement>();
         if (player == null) return;
-
         if (IsFlattened || state == State.Carried) return;
-
-        if (IsPlayerOnTop(player))
-            return; // safe while standing
+        if (IsPlayerOnTop(player)) return;
 
         if (failOnTouchPlayer)
         {
-            Debug.LogError("Player failed: sustained contact with small monster (side/front).");
-            // TODO: game-over hook
+            Debug.LogError("Player failed: sustained contact.");
         }
     }
 
     // ---------- Gizmos ----------
     void OnDrawGizmosSelected()
     {
-        // patrol edges
         if (leftPoint && rightPoint)
         {
             Gizmos.color = Color.cyan;
@@ -380,13 +438,11 @@ public class SmallMonster : MonoBehaviour, ICarryable
             Gizmos.DrawSphere(rightPoint.position, 0.07f);
         }
 
-        // detection ray
         Gizmos.color = Color.red;
         int dir = (Application.isPlaying ? facing : 1);
         Vector3 origin = transform.position + new Vector3(0.1f * dir, 0f, 0f);
         Gizmos.DrawLine(origin, origin + new Vector3(detectionRangeY * dir, 0f, 0f));
 
-        // ground check gizmo
         if (groundCheck)
         {
             Gizmos.color = Color.green;
