@@ -1,13 +1,10 @@
 fileFormatVersion: 2
-guid: 598c6ca33e87b4349b615ea7dcf181e4
+guid: 6929dc47a427d6c47b7da494c87855ad
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: -3930790829222249195
-    second: prospect_0
-  - first:
-      213: -5699263372806613056
-    second: prospect_1
+      213: 4699205242155276717
+    second: fa8bbf1e50c0ab7d2dd0b12f30c3eaea_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -99,52 +96,17 @@ TextureImporter:
     ignorePlatformSupport: 0
     androidETC2FallbackOverride: 0
     forceMaximumCompressionQuality_BC6H_BC7: 0
-  - serializedVersion: 4
-    buildTarget: WebGL
-    maxTextureSize: 2048
-    resizeAlgorithm: 0
-    textureFormat: -1
-    textureCompression: 1
-    compressionQuality: 50
-    crunchedCompression: 0
-    allowsAlphaSplitting: 0
-    overridden: 0
-    ignorePlatformSupport: 0
-    androidETC2FallbackOverride: 0
-    forceMaximumCompressionQuality_BC6H_BC7: 0
   spriteSheet:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: prospect_0
-      rect:
-        serializedVersion: 2
-        x: 1130
-        y: 525
-        width: 38
-        height: 18
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: 51d38d921960379c0800000000000000
-      internalID: -3930790829222249195
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: prospect_1
+      name: fa8bbf1e50c0ab7d2dd0b12f30c3eaea_0
       rect:
         serializedVersion: 2
         x: 0
         y: 0
-        width: 2194
-        height: 493
+        width: 1280
+        height: 1280
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -153,8 +115,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 0c7977e882628e0b0800000000000000
-      internalID: -5699263372806613056
+      spriteID: da99151354ee63140800000000000000
+      internalID: 4699205242155276717
       vertices: []
       indices: 
       edges: []
@@ -173,8 +135,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      prospect_0: -3930790829222249195
-      prospect_1: -5699263372806613056
+      fa8bbf1e50c0ab7d2dd0b12f30c3eaea_0: 4699205242155276717
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
