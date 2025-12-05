@@ -6,6 +6,7 @@ public class SoundManager : MonoBehaviour
     public AudioClip doorOpenSound;
     public AudioClip playerFlattenSound;
     public AudioClip trapDeathSound;
+    public AudioClip keyBreakSound;
     
     [Header("Audio Settings")]
     public float soundVolume = 0.7f;
@@ -63,6 +64,14 @@ public class SoundManager : MonoBehaviour
         if (trapDeathSound != null)
         {
             audioSource.PlayOneShot(trapDeathSound);
+        }
+    }
+    
+    public void PlayKeyBreakSound()
+    {
+        if (keyBreakSound != null)
+        {
+            audioSource.PlayOneShot(keyBreakSound);
         }
     }
     

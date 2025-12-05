@@ -19,8 +19,9 @@ public class TutorialManager : MonoBehaviour
     public Transform keySpawnPoint;
     
     private int currentStep = 0;
-    private bool[] stepCompleted = new bool[3];
+    private bool[] stepCompleted = new bool[4];
     private GameObject tutorialKey;
+    private Door tutorialDoor;
     
     // Track individual key presses for step 0
     private bool aKeyPressed = false;
@@ -30,9 +31,11 @@ public class TutorialManager : MonoBehaviour
     private bool keyPickedUp = false;
     private bool keyDropped = false;
     
+    // Track door interaction for step 3
+    private bool keyGivenToDoor = false;
+    
     private void Start()
     {
-        Debug.Log("TutorialManager: Start method called");
         StartTutorial();
     }
     
@@ -42,6 +45,7 @@ public class TutorialManager : MonoBehaviour
         stepCompleted[0] = false;
         stepCompleted[1] = false;
         stepCompleted[2] = false;
+        stepCompleted[3] = false;
         
         // Reset key tracking for step 0
         aKeyPressed = false;
@@ -51,34 +55,42 @@ public class TutorialManager : MonoBehaviour
         keyPickedUp = false;
         keyDropped = false;
         
+        // Reset door interaction tracking for step 3
+        keyGivenToDoor = false;
+        
+        // Find the tutorial door
+        tutorialDoor = FindObjectOfType<Door>();
+        if (tutorialDoor == null)
+        {
+            Debug.LogWarning("TutorialManager: No Door found in scene!");
+        }
+        
         ShowTutorialStep(0);
     }
     
     private void ShowTutorialStep(int step)
     {
-        Debug.Log("TutorialManager: Showing step " + step);
-        
         string textToShow = "";
         switch (step)
         {
             case 0:
-                textToShow = "Press A/D to move left/right";
+                textToShow = "Press A/D to move left/right!";
                 break;
             case 1:
-                textToShow = "Press SPACE to jump";
+                textToShow = "Press SPACE to jump!";
                 break;
             case 2:
-                textToShow = "Press E to pick up/drop the pine cone";
+                textToShow = "Press E to pick up/drop the acorn!";
                 SpawnTutorialKey();
                 break;
+            case 3:
+                textToShow = "Give the acorn to your squirrel friend in their treehouse!";
+                break;
         }
-        
-        Debug.Log("TutorialManager: Set text to - " + textToShow);
         
         if (tutorialPanel != null)
         {
             tutorialPanel.SetActive(true);
-            Debug.Log("TutorialManager: Tutorial panel activated");
         }
         else
         {
@@ -123,18 +135,15 @@ public class TutorialManager : MonoBehaviour
                 if (Input.GetKeyDown(KeyCode.A))
                 {
                     aKeyPressed = true;
-                    Debug.Log("TutorialManager: A key pressed");
                 }
                 if (Input.GetKeyDown(KeyCode.D))
                 {
                     dKeyPressed = true;
-                    Debug.Log("TutorialManager: D key pressed");
                 }
                 
                 // Complete step only when both keys have been pressed
                 if (aKeyPressed && dKeyPressed)
                 {
-                    Debug.Log("TutorialManager: Both A and D keys pressed, completing step 0");
                     CompleteStep(0);
                 }
                 break;
@@ -152,20 +161,28 @@ public class TutorialManager : MonoBehaviour
                     if (!keyPickedUp)
                     {
                         keyPickedUp = true;
-                        Debug.Log("TutorialManager: Key picked up");
                     }
                     else if (keyPickedUp && !keyDropped)
                     {
                         keyDropped = true;
-                        Debug.Log("TutorialManager: Key dropped");
                     }
                 }
                 
                 // Complete step only when both pickup and drop have occurred
                 if (keyPickedUp && keyDropped)
                 {
-                    Debug.Log("TutorialManager: Key picked up and dropped, completing step 2");
                     CompleteStep(2);
+                }
+                break;
+                
+            case 3: // Door interaction step - check if door is open
+                if (tutorialDoor != null && tutorialDoor.IsOpen())
+                {
+                    if (!keyGivenToDoor)
+                    {
+                        keyGivenToDoor = true;
+                        CompleteStep(3);
+                    }
                 }
                 break;
         }
@@ -178,7 +195,7 @@ public class TutorialManager : MonoBehaviour
             stepCompleted[step] = true;
             currentStep++;
             
-            if (currentStep < 3)
+            if (currentStep < 4)
             {
                 // Add delay before showing next step
                 StartCoroutine(DelayedShowNextStep(currentStep));
@@ -194,8 +211,6 @@ public class TutorialManager : MonoBehaviour
     {
         // Fade out before hiding
         StartCoroutine(FadeOutAndHide());
-        
-        Debug.Log("Tutorial completed! Loading Level 1...");
         
         // Load Level 1 after tutorial completion
         StartCoroutine(LoadLevel1AfterDelay());
@@ -238,8 +253,6 @@ public class TutorialManager : MonoBehaviour
     
     private IEnumerator DelayedShowNextStep(int nextStep)
     {
-        Debug.Log($"TutorialManager: Waiting {stepTransitionDelay} seconds before showing step {nextStep}");
-        
         // Wait for the specified delay
         yield return new WaitForSeconds(stepTransitionDelay);
         

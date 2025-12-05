@@ -13,16 +13,17 @@ public class Trap : MonoBehaviour
         var col = GetComponent<Collider2D>();
         if (col != null)
         {
-            col.isTrigger = true; // Make it a trigger so it doesn't block movement
+            // Make it a solid collider so it physically blocks the player
+            col.isTrigger = false;
         }
     }
     
-    void OnTriggerEnter2D(Collider2D other)
+    void OnCollisionEnter2D(Collision2D collision)
     {
         // Only check if the actual player (not carried objects) hit the trap
-        if (other.gameObject.name == "Player" || other.CompareTag("Player"))
+        if (collision.gameObject.name == "Player" || collision.gameObject.CompareTag("Player"))
         {
-            var player = other.GetComponent<PlayerMovement>();
+            var player = collision.gameObject.GetComponent<PlayerMovement>();
             if (player != null && isDeadly)
             {
                 // Play trap death sound

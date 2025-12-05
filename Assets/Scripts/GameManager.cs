@@ -82,10 +82,22 @@ public class GameManager : MonoBehaviour
             restartTextMeshPro.gameObject.SetActive(false);
         }
         
-        // Keep restart button visible - it should always be available
+        // Keep restart button visible at all times and ensure it's connected
         if (restartButton != null)
         {
             restartButton.gameObject.SetActive(true);
+            restartButton.interactable = true;
+            
+            // Re-setup the onClick listener to ensure it works
+            restartButton.onClick.RemoveAllListeners();
+            restartButton.onClick.AddListener(() => {
+                RestartGame();
+            });
+        }
+        else
+        {
+            // If button is null, try to find it again
+            EnsureUICanvasExists();
         }
         
         var player = FindObjectOfType<PlayerMovement>();
@@ -97,16 +109,21 @@ public class GameManager : MonoBehaviour
     
     void Start()
     {
+        // Create UI canvas
         EnsureUICanvasExists();
+        
+        // Manual tutorial trigger since OnSceneLoaded might not be called
         StartCoroutine(CheckForTutorialAfterDelay());
     }
     
     private System.Collections.IEnumerator CheckForTutorialAfterDelay()
     {
+        // Wait a frame to ensure everything is loaded
         yield return new WaitForEndOfFrame();
         
         string currentSceneName = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
         
+        // Start tutorial only in Tutorial level
         if (currentSceneName == "Tutorial")
         {
             // Tutorial already started in OnSceneLoaded
@@ -129,22 +146,18 @@ public class GameManager : MonoBehaviour
             return;
         }
         
-        Debug.Log($"GameManager: Creating UI canvas from prefab (Scene: {SceneManager.GetActiveScene().name})");
         uiCanvasInstance = Instantiate(uiCanvasPrefab);
-        Debug.Log($"GameManager: UI canvas instantiated: {uiCanvasInstance != null}");
         
         // Find the restart button by name
         var allButtons = uiCanvasInstance.GetComponentsInChildren<UnityEngine.UI.Button>();
-        Debug.Log($"GameManager: Found {allButtons.Length} Button components in UICanvas (Scene: {SceneManager.GetActiveScene().name})");
         
-        // Find restart button by exact name
         foreach (var button in allButtons)
         {
-            Debug.Log($"GameManager: Checking button: '{button.name}'");
-            if (button.name == "RestartButton")
+            if (button.name.ToLower().Contains("restart") || 
+                button.name.ToLower().Contains("retry") ||
+                button.name.ToLower().Contains("play"))
             {
                 restartButton = button;
-                Debug.Log($"GameManager: ✓ Found RestartButton: '{button.name}'");
                 break;
             }
         }
@@ -153,7 +166,6 @@ public class GameManager : MonoBehaviour
         if (restartButton == null && allButtons.Length > 0)
         {
             restartButton = allButtons[0];
-            Debug.Log($"GameManager: Using first button as restart button (fallback): {restartButton.name}");
         }
         
         if (restartButton == null)
@@ -165,49 +177,68 @@ public class GameManager : MonoBehaviour
         // Find game over text elements by name
         var allTextComponents = uiCanvasInstance.GetComponentsInChildren<TextMeshProUGUI>();
         
-        // Find text components by exact name
+        // Look for game over text by name
         foreach (var textComp in allTextComponents)
         {
-            Debug.Log($"GameManager: Found text component: '{textComp.name}'");
-            if (textComp.name == "GameOverText")
+            if (textComp.name.ToLower().Contains("gameover") || 
+                textComp.name.ToLower().Contains("game_over") ||
+                textComp.name.ToLower().Contains("game over"))
             {
                 gameOverTextMeshPro = textComp;
-                // Don't change text content, just hide the GameObject
-                gameOverTextMeshPro.gameObject.SetActive(false);
-                Debug.Log($"GameManager: ✓ Assigned GameOverText: '{gameOverTextMeshPro.name}'");
+                gameOverTextMeshPro.text = gameOverText;
+                gameOverTextMeshPro.gameObject.SetActive(false); // Hide by default
+                break;
             }
-            else if (textComp.name == "RestartText")
+        }
+        
+        // Look for restart instruction text by name
+        foreach (var textComp in allTextComponents)
+        {
+            if (textComp.name.ToLower().Contains("restart") || 
+                textComp.name.ToLower().Contains("instruction") ||
+                textComp.name.ToLower().Contains("press"))
             {
                 restartTextMeshPro = textComp;
-                // Don't change text content, just hide the GameObject
-                restartTextMeshPro.gameObject.SetActive(false);
-                Debug.Log($"GameManager: ✓ Assigned RestartText: '{restartTextMeshPro.name}'");
+                restartTextMeshPro.text = restartText;
+                restartTextMeshPro.gameObject.SetActive(false); // Hide by default
+                break;
             }
+        }
+        
+        // Fallback: if not found by name, use first/second components
+        if (gameOverTextMeshPro == null && allTextComponents.Length > 0)
+        {
+            gameOverTextMeshPro = allTextComponents[0];
+            gameOverTextMeshPro.text = gameOverText;
+            gameOverTextMeshPro.gameObject.SetActive(false);
+        }
+        
+        if (restartTextMeshPro == null && allTextComponents.Length > 1)
+        {
+            restartTextMeshPro = allTextComponents[1];
+            restartTextMeshPro.text = restartText;
+            restartTextMeshPro.gameObject.SetActive(false);
+        }
+        else if (restartTextMeshPro == null && allTextComponents.Length == 1)
+        {
+            restartTextMeshPro = allTextComponents[0];
         }
         
         // Clear any existing listeners and add click listener
         restartButton.onClick.RemoveAllListeners();
         restartButton.onClick.AddListener(() => {
-            Debug.Log($"GameManager: Restart button clicked in scene: {SceneManager.GetActiveScene().name}!");
             RestartGame();
         });
         
-        Debug.Log($"GameManager: Click listener added to restart button: {restartButton.name}");
+        // Ensure button is interactable and always visible
+        restartButton.interactable = true;
+        restartButton.gameObject.SetActive(true); // Always visible
         
         // Make UI canvas persist across scenes
         DontDestroyOnLoad(uiCanvasInstance);
         
         // Force UI canvas to be visible
         uiCanvasInstance.SetActive(true);
-        
-        // Ensure restart button is visible (it should always be available)
-        restartButton.gameObject.SetActive(true);
-        
-        Debug.Log($"UI canvas created from prefab successfully in scene: {SceneManager.GetActiveScene().name}");
-        Debug.Log($"Restart button found: {restartButton.name}");
-        Debug.Log($"Restart button interactable: {restartButton.interactable}");
-        Debug.Log($"Restart button enabled: {restartButton.enabled}");
-        Debug.Log($"Restart button gameObject active: {restartButton.gameObject.activeInHierarchy}");
     }
     
     
@@ -324,23 +355,22 @@ public class GameManager : MonoBehaviour
         }
         else
         {
-            Debug.Log("No next level scene name or index set!");
+            Debug.LogWarning("GameManager: No next level scene name or index set!");
         }
     }
     
     public void GameOver()
     {
-        if (isGameOver) return;
+        if (isGameOver) 
+        {
+            return;
+        }
         
         isGameOver = true;
-        
-        // Debug: Check what components we have
-        Debug.Log($"GameManager: GameOver called - gameOverTextMeshPro: {gameOverTextMeshPro?.name}, restartTextMeshPro: {restartTextMeshPro?.name}");
         
         // Show game over UI
         if (gameOverTextMeshPro != null)
         {
-            Debug.Log($"GameManager: Showing game over text: {gameOverTextMeshPro.name}");
             gameOverTextMeshPro.gameObject.SetActive(true);
         }
         else
@@ -350,7 +380,6 @@ public class GameManager : MonoBehaviour
         
         if (restartTextMeshPro != null)
         {
-            Debug.Log($"GameManager: Showing restart text: {restartTextMeshPro.name}");
             restartTextMeshPro.gameObject.SetActive(true);
         }
         else
@@ -361,8 +390,15 @@ public class GameManager : MonoBehaviour
         // Show restart button
         if (restartButton != null)
         {
-            Debug.Log($"GameManager: Showing restart button: {restartButton.name}");
+            // Ensure button and its parent are active
             restartButton.gameObject.SetActive(true);
+            restartButton.interactable = true;
+            
+            // Ensure parent canvas is active
+            if (uiCanvasInstance != null)
+            {
+                uiCanvasInstance.SetActive(true);
+            }
         }
         else
         {
@@ -375,11 +411,23 @@ public class GameManager : MonoBehaviour
             player.enabled = false;
         }
         
+        // Delay pausing to allow sounds to start playing
+        StartCoroutine(DelayedPause());
+    }
+    
+    IEnumerator DelayedPause()
+    {
+        // Wait a short time to allow sounds to start playing
+        yield return new WaitForSeconds(0.1f);
         Time.timeScale = 0f;
     }
     
     public void RestartGame()
     {
+        // Ensure time scale is reset before loading scene
+        Time.timeScale = 1f;
+        
+        // Load the current scene
         SceneManager.LoadScene(SceneManager.GetActiveScene().name);
     }
     
@@ -390,450 +438,14 @@ public class GameManager : MonoBehaviour
     
     public void ExitGame()
     {
+        // Exit the application
         #if UNITY_EDITOR
+            // In editor, stop playing
             UnityEditor.EditorApplication.isPlaying = false;
         #else
+            // In build, quit application
             Application.Quit();
         #endif
-    }
-    
-    [ContextMenu("Force Start Tutorial")]
-    public void ForceStartTutorial()
-    {
-        Debug.Log("GameManager: Force starting tutorial");
-        StartTutorial();
-    }
-    
-    [ContextMenu("Test Game Exit")]
-    public void TestGameExit()
-    {
-        Debug.Log("GameManager: Testing game exit functionality...");
-        ExitGame();
-    }
-    
-    [ContextMenu("Test Game Over UI")]
-    public void TestGameOverUI()
-    {
-        Debug.Log("GameManager: Testing game over UI...");
-        
-        if (uiCanvasInstance == null)
-        {
-            Debug.LogError("GameManager: UI Canvas instance is null!");
-            return;
-        }
-        
-        Debug.Log($"GameManager: UI Canvas active: {uiCanvasInstance.activeInHierarchy}");
-        Debug.Log($"GameManager: Game over text found: {gameOverTextMeshPro != null}");
-        Debug.Log($"GameManager: Restart text found: {restartTextMeshPro != null}");
-        Debug.Log($"GameManager: Restart button found: {restartButton != null}");
-        
-        if (gameOverTextMeshPro != null)
-        {
-            Debug.Log($"GameManager: Game over text active: {gameOverTextMeshPro.gameObject.activeInHierarchy}");
-            Debug.Log($"GameManager: Game over text content: {gameOverTextMeshPro.text}");
-        }
-        
-        if (restartTextMeshPro != null)
-        {
-            Debug.Log($"GameManager: Restart text active: {restartTextMeshPro.gameObject.activeInHierarchy}");
-            Debug.Log($"GameManager: Restart text content: {restartTextMeshPro.text}");
-        }
-        
-        if (restartButton != null)
-        {
-            Debug.Log($"GameManager: Restart button active: {restartButton.gameObject.activeInHierarchy}");
-        }
-        
-        // Manually trigger game over to test
-        GameOver();
-    }
-    
-    [ContextMenu("Show Restart Button")]
-    public void ShowRestartButton()
-    {
-        if (restartButton != null)
-        {
-            restartButton.gameObject.SetActive(true);
-        }
-    }
-    
-    [ContextMenu("Fix Text Component Names")]
-    public void FixTextComponentNames()
-    {
-        if (uiCanvasInstance == null) return;
-        
-        var allTextComponents = uiCanvasInstance.GetComponentsInChildren<TextMeshProUGUI>();
-        
-        for (int i = 0; i < allTextComponents.Length; i++)
-        {
-            var textComp = allTextComponents[i];
-            string newName = "";
-            
-            if (i == 0)
-            {
-                newName = "GameOverText";
-            }
-            else if (i == 1)
-            {
-                newName = "RestartText";
-            }
-            else
-            {
-                newName = $"TextComponent{i}";
-            }
-            
-            textComp.name = newName;
-            
-            // Set appropriate text content
-            if (i == 0)
-            {
-                textComp.text = gameOverText;
-            }
-            else if (i == 1)
-            {
-                textComp.text = restartText;
-            }
-        }
-    }
-    
-    [ContextMenu("Debug Restart Button Only")]
-    public void DebugRestartButtonOnly()
-    {
-        Debug.Log("=== RESTART BUTTON DEBUG ===");
-        
-        if (restartButton == null)
-        {
-            Debug.LogError("GameManager: Restart button is null!");
-            return;
-        }
-        
-        var buttonGO = restartButton.gameObject;
-        Debug.Log($"GameManager: Button GameObject: {buttonGO.name}");
-        Debug.Log($"GameManager: Button active: {buttonGO.activeInHierarchy}");
-        Debug.Log($"GameManager: Button enabled: {restartButton.enabled}");
-        Debug.Log($"GameManager: Button interactable: {restartButton.interactable}");
-        
-        // Check Button's Image component
-        var image = buttonGO.GetComponent<UnityEngine.UI.Image>();
-        if (image == null)
-        {
-            Debug.LogError("GameManager: No Image component on button!");
-        }
-        else
-        {
-            Debug.Log($"GameManager: Image raycastTarget: {image.raycastTarget}");
-            Debug.Log($"GameManager: Image enabled: {image.enabled}");
-        }
-        
-        // Check click listeners
-        Debug.Log($"GameManager: Button has {restartButton.onClick.GetPersistentEventCount()} persistent listeners");
-        
-        Debug.Log("=== END RESTART BUTTON DEBUG ===");
-    }
-    
-    [ContextMenu("Test Final Level Issue")]
-    public void TestFinalLevelIssue()
-    {
-        Debug.Log($"GameManager: Current scene: {SceneManager.GetActiveScene().name}");
-        Debug.Log($"GameManager: Final level setting: {finalLevel}");
-        
-        string currentSceneName = SceneManager.GetActiveScene().name;
-        if (currentSceneName.StartsWith("Level"))
-        {
-            if (int.TryParse(currentSceneName.Substring(5), out int currentLevel))
-            {
-                Debug.Log($"GameManager: Current level: {currentLevel}");
-                Debug.Log($"GameManager: Is current level == final level? {currentLevel == finalLevel}");
-                
-                if (currentLevel == finalLevel)
-                {
-                    Debug.Log("GameManager: This is the final level - game would exit on completion");
-                }
-                else
-                {
-                    Debug.Log($"GameManager: This is not the final level - {finalLevel - currentLevel} levels remaining");
-                }
-            }
-        }
-        
-        // Test if restart button works when we temporarily change final level
-        Debug.Log("GameManager: Temporarily changing final level to 5...");
-        int originalFinalLevel = finalLevel;
-        finalLevel = 5;
-        
-        Debug.Log("GameManager: Try clicking the restart button now...");
-        
-        // Restore after 5 seconds
-        StartCoroutine(RestoreFinalLevel(originalFinalLevel));
-    }
-    
-    private System.Collections.IEnumerator RestoreFinalLevel(int originalValue)
-    {
-        yield return new WaitForSeconds(5f);
-        finalLevel = originalValue;
-        Debug.Log($"GameManager: Restored final level to {originalValue}");
-    }
-    
-    [ContextMenu("Manually Trigger Restart")]
-    public void ManuallyTriggerRestart()
-    {
-        Debug.Log("GameManager: Manually triggering restart...");
-        RestartGame();
-    }
-    
-    [ContextMenu("Fix Restart Button Only")]
-    public void FixRestartButtonOnly()
-    {
-        Debug.Log("GameManager: Fixing restart button only...");
-        
-        // Re-find the restart button if it's null
-        if (restartButton == null && uiCanvasInstance != null)
-        {
-            Debug.Log("GameManager: Restart button is null, re-finding it...");
-            var allButtons = uiCanvasInstance.GetComponentsInChildren<UnityEngine.UI.Button>();
-            foreach (var button in allButtons)
-            {
-                if (button.name == "RestartButton")
-                {
-                    restartButton = button;
-                    Debug.Log($"GameManager: ✓ Re-found RestartButton: '{button.name}'");
-                    break;
-                }
-            }
-        }
-        
-        if (restartButton == null)
-        {
-            Debug.LogError("GameManager: Restart button is still null!");
-            return;
-        }
-        
-        var buttonGO = restartButton.gameObject;
-        
-        // Ensure button is active and enabled
-        buttonGO.SetActive(true);
-        restartButton.enabled = true;
-        restartButton.interactable = true;
-        
-        // Ensure Image component has raycastTarget enabled
-        var image = buttonGO.GetComponent<UnityEngine.UI.Image>();
-        if (image != null)
-        {
-            image.raycastTarget = true;
-            image.enabled = true;
-        }
-        
-        // Re-add click listener
-        restartButton.onClick.RemoveAllListeners();
-        restartButton.onClick.AddListener(() => {
-            Debug.Log($"GameManager: Restart button clicked (fixed)!");
-            RestartGame();
-        });
-        
-        Debug.Log("GameManager: Restart button fixed!");
-    }
-    
-    [ContextMenu("Debug UI Interaction Issues")]
-    public void DebugUIInteractionIssues()
-    {
-        Debug.Log("=== UI INTERACTION DEBUG ===");
-        
-        // Check EventSystem
-        var eventSystem = UnityEngine.EventSystems.EventSystem.current;
-        if (eventSystem == null)
-        {
-            Debug.LogError("GameManager: No EventSystem found! This will prevent UI interaction.");
-        }
-        else
-        {
-            Debug.Log($"GameManager: EventSystem found: {eventSystem.name}");
-            Debug.Log($"GameManager: EventSystem active: {eventSystem.gameObject.activeInHierarchy}");
-            Debug.Log($"GameManager: EventSystem enabled: {eventSystem.enabled}");
-        }
-        
-        // Check UI Canvas
-        if (uiCanvasInstance == null)
-        {
-            Debug.LogError("GameManager: UI Canvas instance is null!");
-            return;
-        }
-        
-        var canvas = uiCanvasInstance.GetComponent<Canvas>();
-        if (canvas != null)
-        {
-            Debug.Log($"GameManager: Canvas render mode: {canvas.renderMode}");
-            Debug.Log($"GameManager: Canvas sorting order: {canvas.sortingOrder}");
-            Debug.Log($"GameManager: Canvas active: {canvas.gameObject.activeInHierarchy}");
-            
-            // Check GraphicRaycaster
-            var raycaster = canvas.GetComponent<UnityEngine.UI.GraphicRaycaster>();
-            if (raycaster == null)
-            {
-                Debug.LogError("GameManager: No GraphicRaycaster on canvas! This will prevent UI interaction.");
-            }
-            else
-            {
-                Debug.Log($"GameManager: GraphicRaycaster enabled: {raycaster.enabled}");
-            }
-        }
-        
-        // Check Button
-        if (restartButton == null)
-        {
-            Debug.LogError("GameManager: Restart button is null!");
-            return;
-        }
-        
-        var buttonGO = restartButton.gameObject;
-        Debug.Log($"GameManager: Button GameObject: {buttonGO.name}");
-        Debug.Log($"GameManager: Button active: {buttonGO.activeInHierarchy}");
-        Debug.Log($"GameManager: Button enabled: {restartButton.enabled}");
-        Debug.Log($"GameManager: Button interactable: {restartButton.interactable}");
-        
-        // Check Button's Image component (needed for raycast)
-        var image = buttonGO.GetComponent<UnityEngine.UI.Image>();
-        if (image == null)
-        {
-            Debug.LogError("GameManager: No Image component on button! This will prevent raycast detection.");
-        }
-        else
-        {
-            Debug.Log($"GameManager: Image component found, raycastTarget: {image.raycastTarget}");
-            Debug.Log($"GameManager: Image enabled: {image.enabled}");
-        }
-        
-        // Check if there are other UI elements blocking the button
-        var allUIElements = uiCanvasInstance.GetComponentsInChildren<UnityEngine.UI.Graphic>();
-        Debug.Log($"GameManager: Total UI elements in canvas: {allUIElements.Length}");
-        
-        foreach (var element in allUIElements)
-        {
-            if (element.raycastTarget && element.gameObject != buttonGO)
-            {
-                Debug.Log($"GameManager: Other raycast target found: {element.name} (Active: {element.gameObject.activeInHierarchy})");
-            }
-        }
-        
-        Debug.Log("=== END UI INTERACTION DEBUG ===");
-    }
-    
-    [ContextMenu("Fix UI Interaction Issues")]
-    public void FixUIInteractionIssues()
-    {
-        Debug.Log("GameManager: Attempting to fix UI interaction issues...");
-        
-        // Ensure EventSystem exists
-        var eventSystem = UnityEngine.EventSystems.EventSystem.current;
-        if (eventSystem == null)
-        {
-            Debug.LogWarning("GameManager: No EventSystem found, creating one...");
-            var eventSystemGO = new GameObject("EventSystem");
-            eventSystemGO.AddComponent<UnityEngine.EventSystems.EventSystem>();
-            eventSystemGO.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
-            DontDestroyOnLoad(eventSystemGO);
-        }
-        
-        // Fix UI Canvas
-        if (uiCanvasInstance != null)
-        {
-            var canvas = uiCanvasInstance.GetComponent<Canvas>();
-            if (canvas != null)
-            {
-                // Ensure proper canvas settings
-                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-                canvas.sortingOrder = 100;
-                
-                // Ensure GraphicRaycaster exists
-                var raycaster = canvas.GetComponent<UnityEngine.UI.GraphicRaycaster>();
-                if (raycaster == null)
-                {
-                    Debug.Log("GameManager: Adding GraphicRaycaster to canvas...");
-                    canvas.gameObject.AddComponent<UnityEngine.UI.GraphicRaycaster>();
-                }
-            }
-        }
-        
-        // Fix Button
-        if (restartButton != null)
-        {
-            var buttonGO = restartButton.gameObject;
-            
-            // Ensure button is active and enabled
-            buttonGO.SetActive(true);
-            restartButton.enabled = true;
-            restartButton.interactable = true;
-            
-            // Ensure Image component exists and has raycastTarget enabled
-            var image = buttonGO.GetComponent<UnityEngine.UI.Image>();
-            if (image == null)
-            {
-                Debug.Log("GameManager: Adding Image component to button...");
-                image = buttonGO.AddComponent<UnityEngine.UI.Image>();
-            }
-            image.raycastTarget = true;
-            image.enabled = true;
-            
-            // Re-add click listener
-            restartButton.onClick.RemoveAllListeners();
-            restartButton.onClick.AddListener(() => {
-                Debug.Log($"GameManager: Restart button clicked (fixed) in scene: {SceneManager.GetActiveScene().name}!");
-                RestartGame();
-            });
-            
-            Debug.Log("GameManager: UI interaction issues fixed!");
-        }
-        else
-        {
-            Debug.LogError("GameManager: Cannot fix button - restartButton is null!");
-        }
-    }
-    
-    [ContextMenu("Test Restart Button in Current Scene")]
-    public void TestRestartButtonInCurrentScene()
-    {
-        string currentScene = SceneManager.GetActiveScene().name;
-        Debug.Log($"GameManager: Testing restart button in scene: {currentScene}");
-        
-        if (restartButton == null)
-        {
-            Debug.LogError("GameManager: Restart button is null!");
-            return;
-        }
-        
-        Debug.Log($"GameManager: Restart button found: {restartButton.name}");
-        Debug.Log($"GameManager: Restart button active: {restartButton.gameObject.activeInHierarchy}");
-        Debug.Log($"GameManager: Restart button enabled: {restartButton.enabled}");
-        Debug.Log($"GameManager: Restart button interactable: {restartButton.interactable}");
-        
-        // Test if we can manually trigger the restart
-        Debug.Log("GameManager: Manually calling RestartGame()...");
-        RestartGame();
-    }
-    
-    [ContextMenu("Fix Restart Button Issues")]
-    public void FixRestartButtonIssues()
-    {
-        Debug.Log("GameManager: Attempting to fix restart button issues...");
-        
-        if (restartButton == null)
-        {
-            Debug.LogError("GameManager: Restart button is null!");
-            return;
-        }
-        
-        // Ensure button is properly configured
-        restartButton.gameObject.SetActive(true);
-        restartButton.enabled = true;
-        restartButton.interactable = true;
-        
-        // Re-add click listener
-        restartButton.onClick.RemoveAllListeners();
-        restartButton.onClick.AddListener(() => {
-            Debug.Log($"GameManager: Restart button clicked (fixed) in scene: {SceneManager.GetActiveScene().name}!");
-            RestartGame();
-        });
-        
-        Debug.Log("GameManager: Restart button issues fixed!");
     }
     
     public bool IsGameOver()
@@ -860,6 +472,14 @@ public class GameManager : MonoBehaviour
                 tutorialManager.tutorialKeyPrefab = tutorialKeyPrefab;
                 tutorialManager.keySpawnPoint = tutorialKeySpawnPoint;
             }
+            else
+            {
+                Debug.LogError("GameManager: TutorialManager component not found on tutorial canvas prefab!");
+            }
+        }
+        else
+        {
+            Debug.LogError("GameManager: tutorialCanvasPrefab is null! Please assign a tutorial canvas prefab.");
         }
     }
 }

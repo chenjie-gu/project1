@@ -23,23 +23,15 @@ public class TutorialUI : MonoBehaviour
         tutorialManager.tutorialText = tutorialText;
         tutorialManager.tutorialPanel = tutorialPanel;
         
-        // Debug to check if references are set
+        // Check if references are set
         if (tutorialText == null)
         {
             Debug.LogError("TutorialUI: tutorialText is null! Please assign TextMeshProUGUI component.");
-        }
-        else
-        {
-            Debug.Log("TutorialUI: tutorialText found - " + tutorialText.name);
         }
         
         if (tutorialPanel == null)
         {
             Debug.LogError("TutorialUI: tutorialPanel is null! Please assign Panel GameObject.");
-        }
-        else
-        {
-            Debug.Log("TutorialUI: tutorialPanel found - " + tutorialPanel.name);
         }
     }
 }

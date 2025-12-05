@@ -3,7 +3,8 @@ using UnityEngine;
 public enum DoorType
 {
     Normal,
-    Small
+    Small,
+    Level2  // Requires key 1 and key 2
 }
 
 [RequireComponent(typeof(Collider2D))]
@@ -16,6 +17,9 @@ public class Door : MonoBehaviour
     public GameObject doorOpenVisual;
 
     private int deposited = 0;
+    private bool key1Deposited = false;
+    private bool key2Deposited = false;
+    private bool isOpened = false; // Track if door has been opened to prevent multiple sound plays
 
     void Reset()
     {
@@ -36,45 +40,104 @@ public class Door : MonoBehaviour
 
     public bool TryUseKey(PlayerMovement player)
     {
-        if (deposited >= requiredKeys) return false;
-
         var heldKey = player.GetCarriedKey();
-        if (heldKey != null && heldKey.IsHeld)
+        if (heldKey == null || !heldKey.IsHeld) return false;
+
+        // Special handling for Level2 doors - require key 1 and key 2 (order doesn't matter)
+        if (doorType == DoorType.Level2)
         {
-            // Check if key type matches door type
-            if (!IsKeyCompatible(heldKey.keyType, doorType))
+            if (heldKey.keyID == 1)
+            {
+                if (key1Deposited)
+                {
+                    return false;
+                }
+                key1Deposited = true;
+                heldKey.Drop();
+                Destroy(heldKey.gameObject);
+                UpdateVisuals();
+                
+                // Play sound when first key is deposited
+                if (SoundManager.Instance != null)
+                {
+                    SoundManager.Instance.PlayDoorOpenSound();
+                }
+                
+                // Check if both keys are deposited
+                if (key1Deposited && key2Deposited)
+                {
+                    Open();
+                }
+                return true;
+            }
+            else if (heldKey.keyID == 2)
+            {
+                if (key2Deposited)
+                {
+                    return false;
+                }
+                key2Deposited = true;
+                heldKey.Drop();
+                Destroy(heldKey.gameObject);
+                UpdateVisuals();
+                
+                // Play sound when first key is deposited
+                if (SoundManager.Instance != null)
+                {
+                    SoundManager.Instance.PlayDoorOpenSound();
+                }
+                
+                if (key1Deposited && key2Deposited)
+                {
+                    Open();
+                }
+                return true;
+            }
+            else
             {
                 return false;
             }
-            
-            heldKey.Drop();
-            Destroy(heldKey.gameObject);
-            deposited++;
-            UpdateVisuals();
-            
-            if (deposited >= requiredKeys)
-                Open();
-            
-            return true;
         }
         
-        return false;
+        // Normal door behavior for other door types
+        if (deposited >= requiredKeys) return false;
+
+        // Check if key type matches door type
+        if (!IsKeyCompatible(heldKey.keyType, doorType))
+        {
+            return false;
+        }
+        
+        heldKey.Drop();
+        Destroy(heldKey.gameObject);
+        deposited++;
+        UpdateVisuals();
+        
+        if (deposited >= requiredKeys)
+            Open();
+        
+        return true;
     }
 
     private void UpdateVisuals()
     {
-        bool isOpen = deposited >= requiredKeys;
+        bool isOpen = IsOpen();
         if (doorClosedVisual) doorClosedVisual.SetActive(!isOpen);
         if (doorOpenVisual) doorOpenVisual.SetActive(isOpen);
     }
 
     private void Open()
     {
+        // Only open once
+        if (isOpened) return;
+        
+        isOpened = true;
+        
         var col = GetComponent<Collider2D>();
         if (col) col.enabled = false;
         UpdateVisuals();
         
-        // Play door opening sound
+        // Play door opening sound only when door actually opens
         if (SoundManager.Instance != null)
         {
             SoundManager.Instance.PlayDoorOpenSound();
@@ -83,6 +146,13 @@ public class Door : MonoBehaviour
     
     public bool IsOpen()
     {
+        // Level2 doors require both key 1 and key 2
+        if (doorType == DoorType.Level2)
+        {
+            return key1Deposited && key2Deposited;
+        }
+        
+        // Other door types use the normal system
         return deposited >= requiredKeys;
     }
     
@@ -93,6 +163,18 @@ public class Door : MonoBehaviour
     
     private bool IsKeyCompatible(KeyType keyType, DoorType doorType)
     {
+        // Cracked keys can't open any doors
+        if (keyType == KeyType.Cracked)
+        {
+            return false;
+        }
+        
+        // Level2 doors use key ID system, not key type
+        if (doorType == DoorType.Level2)
+        {
+            return true; // Key compatibility is checked by keyID in TryUseKey
+        }
+        
         // Normal keys can only open Normal doors
         // Small keys can only open Small doors
         return (keyType == KeyType.Normal && doorType == DoorType.Normal) ||

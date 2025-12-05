@@ -15,8 +15,8 @@ public class Hammer : MonoBehaviour
     public bool breakCarriedKeyOnHit = true;
     public bool flattenPlayerOnHit = true;
     public bool killPlayerOnHit = true;
-    public GameObject smallKeyPrefab1;
-    public GameObject smallKeyPrefab2;
+    public GameObject smallKeyPrefab;
+    public GameObject crackedKeyPrefab; // Cracked key that can't open any doors
 
     Rigidbody2D rb;
     Collider2D trigger;
@@ -75,24 +75,20 @@ public class Hammer : MonoBehaviour
         // Handle player collision
         if (collision.gameObject.TryGetComponent<PlayerMovement>(out var player))
         {
-            Debug.Log($"Hammer hit player. Player flattened: {player.isFlattened}");
-            
-            // Check if player has a carried key and break it (only if player is grounded)
+            // Check if player has a carried key and break it (only if player is grounded on ground)
             var carriedKey = player.GetCarriedKey();
-            if (carriedKey != null && carriedKey.IsHeld && breakCarriedKeyOnHit && player.IsGrounded())
+            if (carriedKey != null && carriedKey.IsHeld && breakCarriedKeyOnHit && player.IsGroundedOnGround())
             {
-                Debug.Log("Breaking carried key from player collision (player is grounded)");
                 BreakKey(carriedKey, player);
             }
             
             // Hammer is completely safe - no game over, just flatten
             
-            // Flatten player if grounded and flattening is enabled
-            if (flattenPlayerOnHit && player.IsGrounded())
+            // Flatten player if grounded on Ground layer and flattening is enabled
+            // Only flatten when player is standing on Ground layer (not Platform/hammer)
+            if (flattenPlayerOnHit && player.IsGroundedOnGround())
             {
-                Debug.Log("Flattening player");
                 player.SetFlattened(true);
-                Debug.Log($"After flattening. Player flattened: {player.isFlattened}");
             }
             return;
         }
@@ -125,33 +121,50 @@ public class Hammer : MonoBehaviour
         // Handle carried key
         if (key.IsHeld && player != null)
         {
-            Debug.Log($"Breaking key for player. Player flattened: {player.isFlattened}");
-            
             // Destroy the key block collider BEFORE dropping the key
             // This prevents it from persisting when the player flattens
             Key keyComponent = key.GetComponent<Key>();
             if (keyComponent != null && keyComponent.createBlockCollider)
             {
-                Debug.Log("Destroying key block collider");
                 keyComponent.DestroyKeyBlockCollider();
             }
             
             key.Drop();
             player.SetCarriedKey(null);
-            
-            Debug.Log($"After key break. Player flattened: {player.isFlattened}");
         }
         
-        // Create 2 smaller keys using different prefabs
-        CreateSmallKey(keyPosition + Vector3.left * 0.5f, smallKeyPrefab1);
-        CreateSmallKey(keyPosition + Vector3.right * 0.5f, smallKeyPrefab2);
+        // Use the static method to split the key
+        SplitKey(key, keyPosition, smallKeyPrefab, crackedKeyPrefab);
+    }
+    
+    // Public static method that can be called from Key script
+    public static void SplitKey(Key key, Vector3 keyPosition, GameObject smallKeyPrefab, GameObject crackedKeyPrefab)
+    {
+        // Only break normal keys, not small keys
+        if (key.keyType != KeyType.Normal) return;
+        
+        // Play key break sound
+        if (SoundManager.Instance != null)
+        {
+            SoundManager.Instance.PlayKeyBreakSound();
+        }
+        
+        // Create one small key and one cracked key (cracked keys can't open any doors)
+        CreateKeyAtPosition(keyPosition + Vector3.left * 0.5f, smallKeyPrefab, KeyType.Small);
+        CreateKeyAtPosition(keyPosition + Vector3.right * 0.5f, crackedKeyPrefab, KeyType.Cracked);
         
         // Destroy the original key
         Destroy(key.gameObject);
     }
 
 
-    void CreateSmallKey(Vector3 position, GameObject prefab)
+    void CreateSmallKey(Vector3 position, GameObject prefab, KeyType keyType = KeyType.Small)
+    {
+        CreateKeyAtPosition(position, prefab, keyType);
+    }
+    
+    // Public static method for creating keys at a position
+    public static void CreateKeyAtPosition(Vector3 position, GameObject prefab, KeyType keyType = KeyType.Small)
     {
         if (prefab != null)
         {
@@ -176,46 +189,42 @@ public class Hammer : MonoBehaviour
                 return; // Don't create the key if we can't find ground
             }
             
-            // Create the small key at a temporary position first
-            GameObject smallKey = Instantiate(prefab, Vector3.zero, Quaternion.identity);
-            smallKey.name = "SmallKey";
+            // Create the key at a temporary position first
+            GameObject key = Instantiate(prefab, Vector3.zero, Quaternion.identity);
+            key.name = keyType == KeyType.Small ? "SmallKey" : (keyType == KeyType.Cracked ? "CrackedKey" : "NormalKey");
             
             // Get the key component and set its type
-            Key keyComponent = smallKey.GetComponent<Key>();
+            Key keyComponent = key.GetComponent<Key>();
             if (keyComponent == null)
             {
-                keyComponent = smallKey.AddComponent<Key>();
+                keyComponent = key.AddComponent<Key>();
             }
-            keyComponent.keyType = KeyType.Small;
+            keyComponent.keyType = keyType;
             
             // Use the same logic as normal key Drop() method
-            Collider2D keyCollider = smallKey.GetComponent<Collider2D>();
+            Collider2D keyCollider = key.GetComponent<Collider2D>();
             if (keyCollider != null)
             {
                 // Position the key temporarily to get accurate bounds
-                smallKey.transform.position = new Vector3(position.x, groundLevel, position.z);
+                key.transform.position = new Vector3(position.x, groundLevel, position.z);
                 
                 // Force bounds update
                 Physics2D.SyncTransforms();
                 
                 // Calculate the distance from transform center to collider bottom
-                float distanceFromCenterToBottom = smallKey.transform.position.y - keyCollider.bounds.min.y;
-                Debug.Log($"Small key debug - Ground level: {groundLevel}, Distance to bottom: {distanceFromCenterToBottom}, Final position: {new Vector3(position.x, groundLevel + distanceFromCenterToBottom, position.z)}");
+                float distanceFromCenterToBottom = key.transform.position.y - keyCollider.bounds.min.y;
                 
                 // Position the key so its bottom edge touches the ground
                 Vector3 groundPosition = new Vector3(position.x, groundLevel + distanceFromCenterToBottom, position.z);
-                smallKey.transform.position = groundPosition;
+                key.transform.position = groundPosition;
                 
                 // Set as trigger AFTER positioning to prevent collision with player
                 keyCollider.isTrigger = true;
-                
-                // Final check - verify the key is actually positioned correctly
-                Debug.Log($"Small key ACTUAL final position: {smallKey.transform.position}, Collider bounds: {keyCollider.bounds}");
             }
             else
             {
-                Debug.LogError("Small key prefab is missing a Collider2D component!");
-                Destroy(smallKey); // Clean up the created object
+                Debug.LogError("Key prefab is missing a Collider2D component!");
+                Destroy(key); // Clean up the created object
                 return;
             }
             

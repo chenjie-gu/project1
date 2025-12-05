@@ -63,23 +63,16 @@ public class MusicManager : MonoBehaviour
         // Only restart if we're actually changing to a different scene
         if (currentSceneName != "" && newSceneName != currentSceneName)
         {
-            Debug.Log($"MusicManager: New level detected - {newSceneName} (was {currentSceneName})");
-            
             // Restart music for new level
             RestartMusicForNewLevel();
         }
         else if (currentSceneName == "")
         {
-            Debug.Log($"MusicManager: First scene load - {newSceneName}, starting music");
             // First time loading any scene, just start music
             if (backgroundMusicTracks.Length > 0 && !audioSource.isPlaying)
             {
                 PlayCurrentTrack();
             }
-        }
-        else
-        {
-            Debug.Log($"MusicManager: Same level restarted - {newSceneName}, keeping music playing");
         }
         
         currentSceneName = newSceneName;
@@ -106,7 +99,6 @@ public class MusicManager : MonoBehaviour
         {
             audioSource.clip = backgroundMusicTracks[currentTrackIndex];
             audioSource.Play();
-            Debug.Log($"MusicManager: Playing track {currentTrackIndex + 1}/{backgroundMusicTracks.Length} - {audioSource.clip.name}");
         }
     }
     

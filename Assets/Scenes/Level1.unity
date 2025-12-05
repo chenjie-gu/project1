@@ -181,8 +181,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SoundManager
   doorOpenSound: {fileID: 8300000, guid: 94223fe080ac54c91a8321aff12cc1b4, type: 3}
   playerFlattenSound: {fileID: 8300000, guid: e7642c6206d504d649e57f3dd58e8f0c, type: 3}
-  trapDeathSound: {fileID: 0}
-  soundVolume: 0.7
+  trapDeathSound: {fileID: 8300000, guid: 3c11e97bea8104fd48c3e59343c328e8, type: 3}
+  keyBreakSound: {fileID: 8300000, guid: 9c2d1c9b79bc54a468f818ebcef6fa4f, type: 3}
+  soundVolume: 1
 --- !u!4 &33693262
 Transform:
   m_ObjectHideFlags: 0
@@ -2948,8 +2949,8 @@ MonoBehaviour:
   breakCarriedKeyOnHit: 0
   flattenPlayerOnHit: 0
   killPlayerOnHit: 0
-  smallKeyPrefab1: {fileID: 0}
-  smallKeyPrefab2: {fileID: 0}
+  smallKeyPrefab: {fileID: 0}
+  crackedKeyPrefab: {fileID: 0}
 --- !u!61 &1706280075
 BoxCollider2D:
   m_ObjectHideFlags: 0
@@ -3132,6 +3133,9 @@ MonoBehaviour:
   groundCheck: {fileID: 1096353214}
   checkRadius: 0.05
   groundLayer:
+    serializedVersion: 2
+    m_Bits: 1032
+  groundOnlyLayer:
     serializedVersion: 2
     m_Bits: 8
   moveSpeed: 7

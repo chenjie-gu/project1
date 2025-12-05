@@ -150,18 +150,4 @@ public class Firefly : MonoBehaviour
         directionChangeTimer = 0f;
         SetNewTargetPosition();
     }
-    
-    // Debug method to check movement status
-    [ContextMenu("Debug Movement Status")]
-    public void DebugMovementStatus()
-    {
-        Debug.Log($"Firefly {gameObject.name}:");
-        Debug.Log($"  Enable Movement: {enableMovement}");
-        Debug.Log($"  Move Speed: {moveSpeed}");
-        Debug.Log($"  Move Radius: {moveRadius}");
-        Debug.Log($"  Current Position: {transform.position}");
-        Debug.Log($"  Start Position: {startPosition}");
-        Debug.Log($"  Target Position: {targetPosition}");
-        Debug.Log($"  Distance from start: {Vector3.Distance(transform.position, startPosition)}");
-    }
 }

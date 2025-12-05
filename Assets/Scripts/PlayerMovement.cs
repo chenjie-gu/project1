@@ -7,7 +7,8 @@ public class PlayerMovement : MonoBehaviour
     [Header("Ground Check")]
     public Transform groundCheck;
     public float checkRadius = 0.25f;
-    public LayerMask groundLayer;
+    public LayerMask groundLayer; // Includes both Ground and Platform layers (for jumping)
+    public LayerMask groundOnlyLayer; // Only Ground layer (for flattening checks)
 
     [Header("Movement")]
     public float moveSpeed;
@@ -40,6 +41,7 @@ public class PlayerMovement : MonoBehaviour
     Sprite originalSprite;
     float moveInput;
     bool isGrounded;
+    bool isGroundedOnGround; // True only when standing on Ground layer (not Platform)
     KeyCode jumpKey = KeyCode.Space;
     KeyCode interactKey = KeyCode.E;
     bool jumpRequested;
@@ -47,6 +49,10 @@ public class PlayerMovement : MonoBehaviour
     bool isTouchingLeftWall;
     bool isTouchingRightWall;
     bool isWallSliding;
+    
+    // Platform tracking for kinematic platforms
+    private Transform currentPlatform;
+    private Vector3 lastPlatformPosition;
 
     // Store original values for flattened state
     Vector3 originalScale;
@@ -148,10 +154,14 @@ public class PlayerMovement : MonoBehaviour
                 float colliderBottom = activeCollider.bounds.min.y;
                 Vector3 groundCheckPos = new Vector3(transform.position.x, colliderBottom, transform.position.z);
                 isGrounded = Physics2D.OverlapCircle(groundCheckPos, checkRadius, groundLayer);
+                // Check if grounded on Ground layer only (not Platform)
+                isGroundedOnGround = Physics2D.OverlapCircle(groundCheckPos, checkRadius, groundOnlyLayer);
             }
             else
             {
                 isGrounded = Physics2D.OverlapCircle(groundCheck.position, checkRadius, groundLayer);
+                // Check if grounded on Ground layer only (not Platform)
+                isGroundedOnGround = Physics2D.OverlapCircle(groundCheck.position, checkRadius, groundOnlyLayer);
             }
         }
         
@@ -188,7 +198,42 @@ public class PlayerMovement : MonoBehaviour
             }
         }
         
-        // Platform detection is now handled directly in the platform movement section
+        // Platform movement detection - track platform for position-based movement
+        Transform detectedPlatform = null;
+        if (isGrounded && groundCheck != null)
+        {
+            // Detect platform
+            Collider2D[] hits = Physics2D.OverlapCircleAll(groundCheck.position, checkRadius, groundLayer);
+            
+            foreach (var hit in hits)
+            {
+                if ((groundLayer.value & (1 << hit.gameObject.layer)) != 0)
+                {
+                    Rigidbody2D platformRb = hit.gameObject.GetComponent<Rigidbody2D>();
+                    if (platformRb != null)
+                    {
+                        detectedPlatform = platformRb.transform;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Track platform for movement calculation
+        if (detectedPlatform != null)
+        {
+            if (currentPlatform != detectedPlatform)
+            {
+                // New platform detected, initialize tracking
+                currentPlatform = detectedPlatform;
+                lastPlatformPosition = currentPlatform.position;
+            }
+        }
+        else
+        {
+            // Not on a platform, clear tracking
+            currentPlatform = null;
+        }
         
         // enforce horizontal boundaries
         if (enforceBoundaries)
@@ -233,6 +278,21 @@ public class PlayerMovement : MonoBehaviour
         }
         
         
+        // Apply platform movement for kinematic platforms (direct position movement)
+        // This must happen AFTER all velocity calculations
+        if (currentPlatform != null && isGrounded)
+        {
+            // Calculate how much the platform moved since last frame
+            Vector3 platformDelta = currentPlatform.position - lastPlatformPosition;
+            if (platformDelta.magnitude > 0.0001f) // Only move if platform actually moved
+            {
+                // Move player by the same amount as the platform moved
+                transform.position += platformDelta;
+            }
+            // Update last position for next frame
+            lastPlatformPosition = currentPlatform.position;
+        }
+        
         // enforce vertical boundaries
         float halfHeight = activeCollider.bounds.size.y * 0.5f;
         float currentY = transform.position.y;
@@ -249,28 +309,6 @@ public class PlayerMovement : MonoBehaviour
             transform.position = new Vector3(transform.position.x, topBoundary - halfHeight, transform.position.z);
             rb.linearVelocity = new Vector2(rb.linearVelocity.x, 0);
         }
-        
-        // Physics-based platform movement - no direct position manipulation
-        if (isGrounded && groundCheck != null)
-        {
-            // Detect platform and apply its velocity to player
-            Collider2D[] hits = Physics2D.OverlapCircleAll(groundCheck.position, checkRadius, groundLayer);
-            
-            foreach (var hit in hits)
-            {
-                if ((groundLayer.value & (1 << hit.gameObject.layer)) != 0)
-                {
-                    Rigidbody2D platformRb = hit.gameObject.GetComponent<Rigidbody2D>();
-                    if (platformRb != null)
-                    {
-                        // Apply platform velocity to player's velocity
-                        Vector2 platformVelocity = platformRb.linearVelocity;
-                        newVelocity += platformVelocity;
-                        break;
-                    }
-                }
-            }
-        }
     }
 
     public void SetFlattened(bool flattened)
@@ -282,6 +320,12 @@ public class PlayerMovement : MonoBehaviour
 
         if (flattened)
         {
+            // Play flatten sound
+            if (SoundManager.Instance != null)
+            {
+                SoundManager.Instance.PlayPlayerFlattenSound();
+            }
+            
             // Scale sprite width to 1.3x and height to 1.3x
             Vector3 flattenedScale = new Vector3(originalScale.x * 1.3f, originalScale.y * 1.3f, originalScale.z);
             transform.localScale = flattenedScale;
@@ -300,12 +344,6 @@ public class PlayerMovement : MonoBehaviour
             if (spriteRenderer != null && flattenedSprite != null)
             {
                 spriteRenderer.sprite = flattenedSprite;
-            }
-            
-            // Play flattening sound
-            if (SoundManager.Instance != null)
-            {
-                SoundManager.Instance.PlayPlayerFlattenSound();
             }
         }
         else
@@ -355,10 +393,10 @@ public class PlayerMovement : MonoBehaviour
     }
     
     // Check if player is carrying a small monster (for LargeMonster AI)
-    public bool IsCarryingSmallMonster()
-    {
-        return carried is SmallMonster;
-    }
+        // public bool IsCarryingSmallMonster()
+        // {
+        //     return carried is SmallMonster;
+        // }
 
     void OnDrawGizmosSelected()
     {
@@ -384,6 +422,12 @@ public class PlayerMovement : MonoBehaviour
     public bool IsGrounded()
     {
         return isGrounded;
+    }
+    
+    // Method to check if player is grounded on Ground layer only (not Platform)
+    public bool IsGroundedOnGround()
+    {
+        return isGroundedOnGround;
     }
     
     void CheckWallContact()
