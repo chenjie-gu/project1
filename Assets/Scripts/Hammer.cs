@@ -101,7 +101,7 @@ public class Hammer : MonoBehaviour
 
 void OnTriggerEnter2D(Collider2D other)
 {
-    if (other.TryGetComponent<Key>(out var key) && breakCarriedKeyOnHit)
+    if (other.TryGetComponent<Key4>(out var key) && breakCarriedKeyOnHit)
     {
         PlayerMovement player = key.IsHeld ? other.GetComponentInParent<PlayerMovement>() : null;
         BreakKey(key, player);
@@ -115,7 +115,7 @@ void OnTriggerEnter2D(Collider2D other)
 
 
     // --- Keys from earlier levels (kept intact) ---
-    void BreakKey(Key key, PlayerMovement player = null)
+    void BreakKey(Key4 key, PlayerMovement player = null)
     {
         if (key.keyType != KeyType.Normal) return;
 
@@ -147,7 +147,7 @@ void OnTriggerEnter2D(Collider2D other)
 
         GameObject smallKey = Instantiate(smallKeyPrefab, groundPosition, Quaternion.identity);
         smallKey.name = "SmallKey";
-        Key keyComponent = smallKey.GetComponent<Key>() ?? smallKey.AddComponent<Key>();
+        Key4 keyComponent = smallKey.GetComponent<Key4>() ?? smallKey.AddComponent<Key4>();
         keyComponent.keyType = KeyType.Small;
     }
 }

@@ -4,7 +4,7 @@ public enum KeyType { Normal, Small }
 
 [RequireComponent(typeof(Collider2D))]
 [RequireComponent(typeof(Rigidbody2D))]
-public class Key : MonoBehaviour, ICarryable
+public class Key4 : MonoBehaviour, ICarryable
 {
     [Header("Key Properties")]
     public KeyType keyType = KeyType.Normal;

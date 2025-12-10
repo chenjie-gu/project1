@@ -270,7 +270,7 @@ public class PlayerMovement : MonoBehaviour
     // Doors
     public bool TryConsumeOneKey()
     {
-        if (carried is Key k)
+        if (carried is Key4 k)
         {
             k.Drop();
             Destroy(k.gameObject);
@@ -280,8 +280,8 @@ public class PlayerMovement : MonoBehaviour
         return false;
     }
 
-    public Key GetCarriedKey() => carried as Key;
-    public void SetCarriedKey(Key key) => carried = key;
+    public Key4 GetCarriedKey() => carried as Key4;
+    public void SetCarriedKey(Key4 key) => carried = key;
 
     // Gizmos
     void OnDrawGizmosSelected()
