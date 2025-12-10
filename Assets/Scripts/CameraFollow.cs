@@ -33,7 +33,7 @@ public class CameraFollow : MonoBehaviour
         }
         
         // Apply camera boundaries - stop following before player hits boundary
-        PlayerMovement player = target.GetComponent<PlayerMovement>();
+        PlayerMovement4 player = target.GetComponent<PlayerMovement4>();
         if (player != null)
         {
             Camera cam = GetComponent<Camera>();

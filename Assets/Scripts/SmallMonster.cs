@@ -236,7 +236,7 @@ public class SmallMonster : MonoBehaviour, ICarryable
         Debug.DrawRay(origin, dir * detectionRangeY, Color.red, 0.05f);
 
         // 只有打中且带有 PlayerMovement 组件才算
-        return hit.collider != null && hit.collider.GetComponent<PlayerMovement>() != null;
+        return hit.collider != null && hit.collider.GetComponent<PlayerMovement4>() != null;
     }
 
     IEnumerator ChargeRoutine()
@@ -365,7 +365,7 @@ public class SmallMonster : MonoBehaviour, ICarryable
     }
 
     // ---------- Collision / Safety / Fail ----------
-    bool IsPlayerOnTop(PlayerMovement player)
+    bool IsPlayerOnTop(PlayerMovement4 player)
     {
         if (!allowStandOnTop || player == null || col == null) return false;
         var pCol = player.GetComponent<Collider2D>();
@@ -418,7 +418,7 @@ public class SmallMonster : MonoBehaviour, ICarryable
         }
 
         // --- 玩家交互逻辑 (保持原样) ---
-        var player = c.collider.GetComponent<PlayerMovement>();
+        var player = c.collider.GetComponent<PlayerMovement4>();
         if (player != null)
         {
             if (IsFlattened || state == State.Carried) return;
@@ -446,7 +446,7 @@ public class SmallMonster : MonoBehaviour, ICarryable
         // 持续接触无害化
         if (state == State.StunnedAirborne || state == State.Dead) return;
 
-        var player = c.collider.GetComponent<PlayerMovement>();
+        var player = c.collider.GetComponent<PlayerMovement4>();
         if (player == null) return;
         if (IsFlattened || state == State.Carried) return;
         if (IsPlayerOnTop(player)) return;

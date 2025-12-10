@@ -44,7 +44,7 @@ public class LargeMonster : MonoBehaviour
 
         // Detect player inside range
         Collider2D hit = Physics2D.OverlapCircle(transform.position, detectionRange, playerLayer);
-        if (hit && hit.TryGetComponent<PlayerMovement>(out var player))
+        if (hit && hit.TryGetComponent<PlayerMovement4>(out var player))
         {
             // Don’t attack if player is carrying a small monster
             if (player.IsCarryingSmallMonster()) return;

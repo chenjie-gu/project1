@@ -3,7 +3,7 @@ using System.Collections;
 
 [RequireComponent(typeof(Rigidbody2D))]
 [RequireComponent(typeof(Collider2D))]
-public class Hammer : MonoBehaviour
+public class Hammer4 : MonoBehaviour
 {
     [Header("Motion")]
     public Transform topPoint;
@@ -73,7 +73,7 @@ public class Hammer : MonoBehaviour
     void OnCollisionEnter2D(Collision2D collision)
     {
     // Player
-        if (collision.gameObject.TryGetComponent<PlayerMovement>(out var player))
+        if (collision.gameObject.TryGetComponent<PlayerMovement4>(out var player))
         {
         if (breakCarriedKeyOnHit)
         {
@@ -103,7 +103,7 @@ void OnTriggerEnter2D(Collider2D other)
 {
     if (other.TryGetComponent<Key4>(out var key) && breakCarriedKeyOnHit)
     {
-        PlayerMovement player = key.IsHeld ? other.GetComponentInParent<PlayerMovement>() : null;
+        PlayerMovement4 player = key.IsHeld ? other.GetComponentInParent<PlayerMovement4>() : null;
         BreakKey(key, player);
     }
 
@@ -115,7 +115,7 @@ void OnTriggerEnter2D(Collider2D other)
 
 
     // --- Keys from earlier levels (kept intact) ---
-    void BreakKey(Key4 key, PlayerMovement player = null)
+    void BreakKey(Key4 key, PlayerMovement4 player = null)
     {
         if (key.keyType != KeyType.Normal) return;
 

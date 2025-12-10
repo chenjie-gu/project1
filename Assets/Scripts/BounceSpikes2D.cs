@@ -181,7 +181,7 @@ public class BounceSpikes2D : MonoBehaviour
         s_lastBounceTime[id] = Time.time;
 
         // Grant immediate jump window to Player
-        var pm = rb.GetComponent<PlayerMovement>();
+        var pm = rb.GetComponent<PlayerMovement4>();
         if (pm != null && immediateJumpWindow > 0f)
             pm.GrantImmediateJumpWindow(immediateJumpWindow);
 

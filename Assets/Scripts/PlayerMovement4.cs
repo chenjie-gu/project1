@@ -4,7 +4,7 @@ using System.Collections;
 [RequireComponent(typeof(Rigidbody2D))]
 [RequireComponent(typeof(Collider2D))]
 [RequireComponent(typeof(SpriteRenderer))]
-public class PlayerMovement : MonoBehaviour
+public class PlayerMovement4 : MonoBehaviour
 {
     [Header("Ground Check")]
     public Transform groundCheck;

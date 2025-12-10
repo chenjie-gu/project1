@@ -27,14 +27,14 @@ public class Door : MonoBehaviour
 
     void OnTriggerEnter2D(Collider2D other)
     {
-        var player = other.GetComponent<PlayerMovement>();
+        var player = other.GetComponent<PlayerMovement4>();
         if (!player) return;
 
         // Only consume key if player is carrying one and presses interact
         // This will be handled by the player's interact system instead
     }
 
-    public bool TryUseKey(PlayerMovement player)
+    public bool TryUseKey(PlayerMovement4 player)
     {
         if (deposited >= requiredKeys) return false;
 
